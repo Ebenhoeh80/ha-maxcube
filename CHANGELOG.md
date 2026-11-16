@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-11-16
+
+### Added
+- **Connectivity** binary sensor on the Cube device (on = the Cube is reachable /
+  the last poll succeeded), giving the hub its own status entity. It stays
+  available even when the Cube is offline, so it can report the disconnected state.
+
 ## [0.3.0] - 2026-11-16
 
 ### Changed
