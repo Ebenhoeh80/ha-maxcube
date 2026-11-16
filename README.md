@@ -50,7 +50,7 @@ integration that ships with Home Assistant Core.
 4. **Settings → Devices & Services → Add Integration → eQ-3 MAX! Cube**, and enter
    the Cube's IP address.
 
-(Or copy `custom_components/maxcube` into your `config/custom_components` folder.)
+(Or copy `custom_components/maxcube_local` into your `config/custom_components` folder.)
 
 ---
 
@@ -74,9 +74,9 @@ continues. Adjust any that don't match exactly under *Settings → Entities*.
 - **One connection at a time.** The Cube accepts only a single client connection.
   Close the MAX! smartphone app — and remove the old YAML `maxcube:` integration —
   before adding this one, otherwise setup fails with *cannot connect*.
-- **Drop-in replacement.** This integration uses the same `maxcube` domain as the
-  Core integration and shadows it. Remove any `maxcube:` block from
-  `configuration.yaml` first.
+- **Separate from the core integration.** Remove any legacy `maxcube:` block from
+  `configuration.yaml` first — otherwise the old integration keeps holding the
+  Cube's single connection.
 - The MAX! cloud was shut down by eQ-3 in 2023; this integration never used it.
 
 ---

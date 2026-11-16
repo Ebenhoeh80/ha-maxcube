@@ -59,6 +59,7 @@ class MaxCubeTemperature(MaxCubeEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
 
     def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
         """Initialize the temperature sensor."""

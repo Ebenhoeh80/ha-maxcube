@@ -23,7 +23,12 @@ from homeassistant.components.climate import (
     HVACAction,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, PRECISION_HALVES, UnitOfTemperature
+from homeassistant.const import (
+    ATTR_TEMPERATURE,
+    PRECISION_HALVES,
+    PRECISION_TENTHS,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -59,7 +64,8 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
 
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_precision = PRECISION_HALVES
+    # The Cube reports the measured temperature in 0.1 °C; setpoints are 0.5 °C.
+    _attr_precision = PRECISION_TENTHS
     _attr_target_temperature_step = PRECISION_HALVES
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE

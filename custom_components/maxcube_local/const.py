@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-DOMAIN = "maxcube"
+DOMAIN = "maxcube_local"
 
 DEFAULT_PORT = 62910
 DEFAULT_SCAN_INTERVAL = 60

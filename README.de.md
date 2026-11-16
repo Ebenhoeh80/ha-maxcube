@@ -52,7 +52,7 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
 4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → eQ-3 MAX! Cube**,
    IP-Adresse des Cubes eingeben.
 
-(Alternativ `custom_components/maxcube` in den Ordner `config/custom_components`
+(Alternativ `custom_components/maxcube_local` in den Ordner `config/custom_components`
 kopieren.)
 
 ---
@@ -79,9 +79,9 @@ angleichen.
   Schließe die MAX!-Smartphone-App — und entferne die alte YAML-`maxcube:`-
   Integration — bevor du diese hinzufügst, sonst schlägt die Einrichtung mit
   *Verbindung fehlgeschlagen* fehl.
-- **Drop-in-Ersatz.** Diese Integration nutzt dieselbe Domain `maxcube` wie die
-  Core-Integration und überschattet sie. Entferne zuvor jeden `maxcube:`-Block aus
-  der `configuration.yaml`.
+- **Eigenständig (kein Core-Override).** Entferne zuvor jeden alten `maxcube:`-Block
+  aus der `configuration.yaml` — sonst hält die alte Integration die einzige
+  Verbindung des Cubes besetzt.
 - Die MAX!-Cloud wurde 2023 von eQ-3 abgeschaltet; diese Integration nutzt sie nicht.
 
 ---
