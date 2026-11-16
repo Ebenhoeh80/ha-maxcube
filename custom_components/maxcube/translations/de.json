@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "eQ-3 MAX! Cube",
+        "description": "Gib die IP-Adresse deines MAX! Cube LAN-Gateways ein. Die MAX!-Smartphone-App und alle anderen Clients müssen getrennt sein, da der Cube nur eine Verbindung gleichzeitig zulässt.",
+        "data": {
+          "host": "IP-Adresse",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen. Prüfe die IP-Adresse und stelle sicher, dass keine andere App mit dem Cube verbunden ist."
+    },
+    "abort": {
+      "already_configured": "Dieser MAX! Cube ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MAX! Cube Optionen",
+        "data": {
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "valve_position": {
+        "name": "Ventilstellung"
+      }
+    }
+  }
+}

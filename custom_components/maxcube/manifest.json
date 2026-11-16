@@ -1,0 +1,13 @@
+{
+  "domain": "maxcube",
+  "name": "eQ-3 MAX! Cube",
+  "codeowners": ["@Ebenhoeh80"],
+  "config_flow": true,
+  "documentation": "https://github.com/Ebenhoeh80/ha-maxcube",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Ebenhoeh80/ha-maxcube/issues",
+  "loggers": ["maxcube"],
+  "requirements": ["maxcube-api==0.4.3"],
+  "version": "0.1.0"
+}
