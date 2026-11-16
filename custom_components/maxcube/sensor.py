@@ -24,7 +24,7 @@ async def async_setup_entry(
     async_add_entities(
         MaxCubeValve(coordinator, device)
         for device in cube.devices
-        if cube.is_thermostat(device)
+        if device.is_thermostat()
     )
 
 

@@ -26,12 +26,12 @@ async def async_setup_entry(
     cube = coordinator.cube
     entities: list[BinarySensorEntity] = []
     for device in cube.devices:
-        if cube.is_windowshutter(device):
+        if device.is_windowshutter():
             entities.append(MaxCubeWindow(coordinator, device))
         if (
-            cube.is_thermostat(device)
-            or cube.is_wallthermostat(device)
-            or cube.is_windowshutter(device)
+            device.is_thermostat()
+            or device.is_wallthermostat()
+            or device.is_windowshutter()
         ):
             entities.append(MaxCubeBattery(coordinator, device))
     async_add_entities(entities)

@@ -50,7 +50,7 @@ async def async_setup_entry(
     async_add_entities(
         MaxCubeClimate(coordinator, device)
         for device in cube.devices
-        if cube.is_thermostat(device) or cube.is_wallthermostat(device)
+        if device.is_thermostat() or device.is_wallthermostat()
     )
 
 
