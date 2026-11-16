@@ -31,10 +31,12 @@ class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):
             except Exception:  # noqa: BLE001 - defensive, library shape varies
                 suggested_area = None
 
+        cube_serial = getattr(coordinator.cube, "serial", None)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.rf_address)},
             name=device.name or f"MAX! {device.rf_address}",
             manufacturer=MANUFACTURER,
             model=DEVICE_TYPE_NAMES.get(device.type, "MAX! Device"),
             suggested_area=suggested_area,
+            via_device=(DOMAIN, cube_serial) if cube_serial else None,
         )

@@ -105,6 +105,22 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         return self._device.target_temperature
 
     @property
+    def extra_state_attributes(self) -> dict[str, float] | None:
+        """Expose the comfort/eco setpoints and the valve position."""
+        device = self._device
+        attrs: dict[str, float] = {}
+        comfort = getattr(device, "comfort_temperature", None)
+        eco = getattr(device, "eco_temperature", None)
+        valve = getattr(device, "valve_position", None)
+        if comfort is not None:
+            attrs["comfort_temperature"] = comfort
+        if eco is not None:
+            attrs["eco_temperature"] = eco
+        if valve is not None:
+            attrs["valve_position"] = valve
+        return attrs or None
+
+    @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
         device = self._device
