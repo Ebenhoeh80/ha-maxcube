@@ -102,14 +102,25 @@ herangezogen — es hat keine Lizenz, und es ist kein Code daraus enthalten.
 
 ---
 
+## 🗺️ Roadmap & Ideen
+
+Geplant und in Prüfung — **gib dem ein 👍, was dir wichtig ist**, und bring eigene Ideen ein:
+
+- 🔜 Wochenprogramm: Heizplan anzeigen und setzen
+- 💡 Reparatur-Hinweis, wenn der Cube nicht erreichbar ist
+- 💡 Diagnose-Sensoren (Komfort-/Eco-/Min-/Max-Sollwerte)
+
+➡️ Alle Ideen & Abstimmung: **[Discussions → Ideas](https://github.com/Ebenhoeh80/ha-maxcube/discussions/categories/ideas)**
+
+---
+
 ## ❤️ Projekt unterstützen
 
 <div align="center">
 
-**Ich entwickle und pflege diese Integration in meiner Freizeit – und trage die laufenden Kosten aus eigener Tasche.**
+**Ich entwickle und pflege diese Integration in meiner Freizeit und trage die laufenden Kosten – meine Zeit, Strom sowie die Entwicklungswerkzeuge und IT-Ausstattung, die ich dafür nutze – aus eigener Tasche.**
 
-Wenn sie dir Zeit oder Ärger erspart, hält eine kleine freiwillige Spende das Projekt am Leben und motiviert zu neuen Funktionen.
-Jeder Beitrag, egal wie klein, freut mich riesig. Vielen Dank! 🙏
+Wenn sie dir Zeit oder Ärger erspart, hilft eine kleine freiwillige Spende, das Projekt am Laufen zu halten. Jeder Beitrag, egal wie klein, freut mich riesig. Vielen Dank! 🙏
 
 <a href="https://www.paypal.com/pool/9p84qTHCFr?sr=wccr">
   <img src="https://img.shields.io/badge/Spendier%20mir%20einen%20Kaffee-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Spenden via PayPal" height="42">
