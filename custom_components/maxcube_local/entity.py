@@ -37,6 +37,7 @@ class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):
             name=device.name or f"MAX! {device.rf_address}",
             manufacturer=MANUFACTURER,
             model=DEVICE_TYPE_NAMES.get(device.type, "MAX! Device"),
+            serial_number=getattr(device, "serial", None),
             suggested_area=suggested_area,
             via_device=(DOMAIN, cube_serial) if cube_serial else None,
         )

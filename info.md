@@ -4,7 +4,8 @@ A modern, UI-configurable Home Assistant integration for the **eQ-3 / ELV MAX!**
 heating system, talking locally to the original **MAX! Cube LAN gateway**
 (no flashing, no cloud).
 
-- Set up entirely from the UI (config flow) — just enter the Cube's IP address.
+- Set up entirely from the UI (config flow) — the Cube is auto-discovered on
+  your network and its IP address is pre-filled.
 - Radiator and wall thermostats as `climate` entities (target temperature,
   auto/manual/off, boost/comfort/eco/away presets, heating action from the valve).
 - Measured temperature and valve opening as `sensor` entities.

@@ -38,6 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
             manufacturer=MANUFACTURER,
             name="MAX! Cube",
             model="MAX! Cube LAN Gateway",
+            serial_number=cube.serial,
             sw_version=cube.firmware_version,
         )
 

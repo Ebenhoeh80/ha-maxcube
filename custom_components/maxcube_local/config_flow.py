@@ -20,6 +20,7 @@ from .const import (
     MIN_SCAN_INTERVAL,
 )
 from .coordinator import MaxCubeConfigEntry
+from .discovery import discover_cubes
 
 
 def _try_connect(host: str, port: int) -> None:
@@ -38,6 +39,7 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle the initial step where the Cube's IP is entered."""
         errors: dict[str, str] = {}
+        suggested_host = ""
         if user_input is not None:
             host = user_input[CONF_HOST]
             port = user_input[CONF_PORT]
@@ -47,15 +49,32 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.hass.async_add_executor_job(_try_connect, host, port)
             except OSError:
                 errors["base"] = "cannot_connect"
+                suggested_host = host
             else:
                 return self.async_create_entry(
                     title=f"MAX! Cube ({host})", data=user_input
                 )
+        else:
+            # First display: broadcast for a Cube to pre-fill the IP address.
+            cubes = await self.hass.async_add_executor_job(discover_cubes)
+            configured = self._async_current_ids()
+            for cube in cubes:
+                if cube["host"] not in configured:
+                    suggested_host = cube["host"]
+                    break
 
+        host_field = (
+            vol.Required(CONF_HOST, default=suggested_host)
+            if suggested_host
+            else vol.Required(CONF_HOST)
+        )
         schema = vol.Schema(
             {
-                vol.Required(CONF_HOST): str,
-                vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
+                host_field: str,
+                vol.Required(
+                    CONF_PORT,
+                    default=(user_input or {}).get(CONF_PORT, DEFAULT_PORT),
+                ): int,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)

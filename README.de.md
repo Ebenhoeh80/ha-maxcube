@@ -20,8 +20,8 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
 
 ## ✨ Funktionen
 
-- **Einrichtung per UI (Config-Flow)** — einfach die IP-Adresse des Cubes eingeben,
-  kein YAML.
+- **Einrichtung per UI (Config-Flow)** — der Cube wird im Netzwerk **automatisch
+  erkannt** (seine IP-Adresse wird vorausgefüllt); kein YAML.
 - **Climate**-Entitäten für Heizkörper- und Wandthermostate:
   - Zieltemperatur (0,5-°C-Schritte),
   - HVAC-Modi Auto / Heizen / Aus,
@@ -88,10 +88,17 @@ angleichen.
 
 ## 🙏 Credits
 
-Basiert auf dem reverse-engineerten MAX!-Protokoll und der Bibliothek
-[`maxcube-api`](https://github.com/uebelack/python-maxcube-api) sowie auf der
-Core-`maxcube`-Integration und der Community-Fork
-[MassiPi/maxcube](https://github.com/MassiPi/maxcube).
+Diese Integration basiert auf der Bibliothek
+[`maxcube-api`](https://github.com/uebelack/python-maxcube-api).
+
+Ihre Climate-Plattform ist **von der Home-Assistant-Core-`maxcube`-Integration
+abgeleitet**, die unter der Apache-Lizenz 2.0 steht. Der erforderliche
+Urheberhinweis und eine Kopie dieser Lizenz liegen in der Datei
+[`NOTICE`](NOTICE).
+
+Das Community-Projekt
+[MassiPi/maxcube](https://github.com/MassiPi/maxcube) wurde **nur als Referenz**
+herangezogen — es hat keine Lizenz, und es ist kein Code daraus enthalten.
 
 ---
 
@@ -115,3 +122,7 @@ Jeder Beitrag, egal wie klein, freut mich riesig. Vielen Dank! 🙏
 ## 📄 Lizenz
 
 MIT © 2026 Daniel Ebenhöh — siehe [LICENSE](LICENSE).
+
+Teile der Climate-Plattform sind von der Apache-2.0-lizenzierten
+Home-Assistant-Core-`maxcube`-Integration abgeleitet; siehe [`NOTICE`](NOTICE)
+für den Urheberhinweis und den Text der Apache-Lizenz 2.0.

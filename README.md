@@ -19,7 +19,8 @@ integration that ships with Home Assistant Core.
 
 ## ✨ Features
 
-- **UI setup (config flow)** — just enter the Cube's IP address, no YAML.
+- **UI setup (config flow)** — the Cube is **auto-discovered** on your network
+  (its IP address is pre-filled); no YAML.
 - **Climate** entities for radiator and wall thermostats:
   - target temperature (0.5 °C steps),
   - HVAC modes Auto / Heat / Off,
@@ -83,10 +84,16 @@ continues. Adjust any that don't match exactly under *Settings → Entities*.
 
 ## 🙏 Credits
 
-Built on the reverse-engineered MAX! protocol and the
-[`maxcube-api`](https://github.com/uebelack/python-maxcube-api) library, and
-inspired by the Home Assistant Core `maxcube` integration and the community fork
-[MassiPi/maxcube](https://github.com/MassiPi/maxcube).
+This integration is built on the
+[`maxcube-api`](https://github.com/uebelack/python-maxcube-api) library.
+
+Its climate platform is **derived from the Home Assistant Core `maxcube`
+integration**, which is licensed under the Apache License 2.0. The required
+attribution and a copy of that license are in the [`NOTICE`](NOTICE) file.
+
+The community project
+[MassiPi/maxcube](https://github.com/MassiPi/maxcube) was consulted **only as a
+reference** — it carries no license, and no code from it is included here.
 
 ---
 
@@ -110,3 +117,7 @@ Every contribution, however small, is hugely appreciated. Thank you! 🙏
 ## 📄 License
 
 MIT © 2026 Daniel Ebenhöh — see [LICENSE](LICENSE).
+
+Portions of the climate platform are derived from the Apache-2.0-licensed Home
+Assistant Core `maxcube` integration; see [`NOTICE`](NOTICE) for the attribution
+and the Apache License 2.0 text.

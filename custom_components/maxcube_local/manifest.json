@@ -11,5 +11,5 @@
   "issue_tracker": "https://github.com/Ebenhoeh80/ha-maxcube/issues",
   "loggers": ["maxcube"],
   "requirements": ["maxcube-api>=0.4.3"],
-  "version": "0.3.1"
+  "version": "0.4.0"
 }

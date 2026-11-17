@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-17
+
+### Added
+- **Automatic Cube discovery** in the config flow: the integration sends a UDP
+  broadcast on the local network and pre-fills the Cube's IP address, so you no
+  longer have to look it up. Manual entry still works as a fallback.
+- The **device serial number** (e.g. `JEQ…`/`KEQ…`) is now shown on each MAX!
+  device and on the Cube hub, via Home Assistant's device registry.
+- Release assets are now **counted downloads**: each release ships a
+  `maxcube_local.zip` asset and HACS installs from it (`zip_release`).
+
+### Changed
+- Documentation/licensing: added a `NOTICE` file crediting the Apache-2.0
+  licensed Home Assistant Core `maxcube` integration (from which the climate
+  platform is derived) and including the Apache License 2.0 text. The READMEs now
+  state that `MassiPi/maxcube` was used only as a reference, with no code taken
+  from it. This addresses the HACS default-store review (PR hacs/default#14273).
+
 ## [0.3.1] - 2026-11-16
 
 ### Added
