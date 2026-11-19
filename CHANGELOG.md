@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **No more deprecation warnings on Home Assistant 2026.11.** The thermostats now
+  provide `native_current_temperature`, `native_target_temperature` and
+  `_attr_native_temperature_unit` (the old names stop working in Home Assistant
+  2027.11), and the devices are linked to the Cube hub with `via_device_id`
+  (`via_device` stops working in 2027.8). Older Home Assistant versions keep
+  using the previous names, so the minimum version is unchanged.
+
 ## [0.4.0] - 2026-11-17
 
 ### Added
