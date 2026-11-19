@@ -38,6 +38,20 @@
       "free_memory_slots": {
         "name": "Free memory slots"
       }
+    },
+    "binary_sensor": {
+      "uninitialized": {
+        "name": "Not initialized"
+      },
+      "device_error": {
+        "name": "Error"
+      },
+      "radio_fault": {
+        "name": "Radio fault"
+      },
+      "device_stale": {
+        "name": "No data received"
+      }
     }
   },
   "services": {
