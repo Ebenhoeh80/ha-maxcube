@@ -32,6 +32,20 @@
       "valve_position": {
         "name": "Valve position"
       }
+    },
+    "binary_sensor": {
+      "uninitialized": {
+        "name": "Not initialized"
+      },
+      "device_error": {
+        "name": "Error"
+      },
+      "radio_fault": {
+        "name": "Radio fault"
+      },
+      "device_stale": {
+        "name": "No data received"
+      }
     }
   }
 }

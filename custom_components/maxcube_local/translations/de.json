@@ -32,6 +32,20 @@
       "valve_position": {
         "name": "Ventilstellung"
       }
+    },
+    "binary_sensor": {
+      "uninitialized": {
+        "name": "Nicht initialisiert"
+      },
+      "device_error": {
+        "name": "Fehler"
+      },
+      "radio_fault": {
+        "name": "Funkstörung"
+      },
+      "device_stale": {
+        "name": "Keine Daten empfangen"
+      }
     }
   }
 }

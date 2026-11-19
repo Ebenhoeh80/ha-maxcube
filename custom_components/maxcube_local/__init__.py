@@ -11,6 +11,7 @@ from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.CLIMATE,
     Platform.SENSOR,
 ]

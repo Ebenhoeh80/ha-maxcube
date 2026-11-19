@@ -37,6 +37,11 @@ async def async_setup_entry(
             or device.is_windowshutter()
         ):
             entities.append(MaxCubeBattery(coordinator, device))
+            # RF link diagnostics: same bit set for every device type.
+            entities.append(MaxCubeUninitialized(coordinator, device))
+            entities.append(MaxCubeError(coordinator, device))
+            entities.append(MaxCubeRadioFault(coordinator, device))
+            entities.append(MaxCubeStale(coordinator, device))
     if coordinator.cube.serial:
         entities.append(MaxCubeConnectivity(coordinator))
     async_add_entities(entities)
@@ -74,6 +79,85 @@ class MaxCubeBattery(MaxCubeEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         """Return True when the battery is low (maxcube-api: battery == 1)."""
         return bool(getattr(self._device, "battery", 0))
+
+
+class MaxCubeDeviceStatus(MaxCubeEntity, BinarySensorEntity):
+    """Base for the RF link diagnostics recovered from the ``L`` message.
+
+    Subclasses set ``_bit_name`` to pick one field out of the device status and
+    ``_problem_value`` to the bit value that means "problem present" — the
+    sensors report *on = problem*, so the HA problem indicator lights up
+    correctly.  ``None`` (device never seen) is passed through to HA as
+    unknown instead of being guessed.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _bit_name: str = ""
+    _problem_value: bool = True
+
+    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+        """Initialize the diagnostic sensor."""
+        super().__init__(coordinator, device)
+        self._attr_unique_id = f"{device.rf_address}_{self._bit_name}"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True when this device has the problem this sensor reports."""
+        value = getattr(self.coordinator.device_status(self._rf_address), self._bit_name)
+        if value is None:
+            return None
+        return value == self._problem_value
+
+
+class MaxCubeUninitialized(MaxCubeDeviceStatus, BinarySensorEntity):
+    """Device is paired with the Cube but has never delivered a config."""
+
+    _attr_translation_key = "uninitialized"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _bit_name = "initialized"
+    # No "initialized" bit means the device never reported a configuration.
+    _problem_value = False
+
+
+class MaxCubeError(MaxCubeDeviceStatus, BinarySensorEntity):
+    """Device is in an error state."""
+
+    _attr_translation_key = "device_error"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _bit_name = "error"
+    _problem_value = True
+
+
+class MaxCubeRadioFault(MaxCubeDeviceStatus, BinarySensorEntity):
+    """Device is not reachable over the air ("Funkstörung").
+
+    Deliberately ``problem`` rather than ``connectivity``: HA renders a
+    ``connectivity`` sensor with *on = connected*, so a ``connectivity`` sensor
+    called "Radio fault" would show "off" as "disconnected" — stating that the
+    radio link is fine while simultaneously claiming the device is not
+    connected.  With ``problem``, on means "fault present", which matches the
+    sensor name.
+    """
+
+    _attr_translation_key = "radio_fault"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _bit_name = "link_error"
+    _problem_value = True
+
+
+class MaxCubeStale(MaxCubeDeviceStatus, BinarySensorEntity):
+    """No frame has been heard from the device within the staleness window."""
+
+    _attr_translation_key = "device_stale"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _bit_name = "stale"
+    _problem_value = True
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Expose when the device was last heard, for graphing and templates."""
+        last_heard = self.coordinator.device_status(self._rf_address).last_heard
+        return {"last_heard": last_heard.isoformat() if last_heard else None}
 
 
 class MaxCubeConnectivity(CoordinatorEntity[MaxCubeCoordinator], BinarySensorEntity):

@@ -10,17 +10,21 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from maxcube.cube import MaxCube
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .linkstatus import DeviceStatus, LinkStatusMaxCube
 
 _LOGGER = logging.getLogger(__name__)
 
 type MaxCubeConfigEntry = ConfigEntry[MaxCubeCoordinator]
+
+# A device counts as stale when nothing was heard from it for this long.  Never
+# shorter than 90 s, so a fast poll interval does not flap the sensor.
+MIN_STALE_AFTER = 90
 
 
 class MaxCubeCoordinator(DataUpdateCoordinator[None]):
@@ -46,11 +50,14 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         )
         self._host = host
         self._port = port
-        self.cube: MaxCube | None = None
+        self.scan_interval = scan_interval
+        # Three missed polls before a device is considered stale.
+        self.stale_after = max(3 * scan_interval, MIN_STALE_AFTER)
+        self.cube: LinkStatusMaxCube | None = None
 
-    def _connect(self) -> MaxCube:
+    def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
-        return MaxCube(self._host, self._port)
+        return LinkStatusMaxCube(self._host, self._port, now=dt_util.utcnow)
 
     async def _async_setup(self) -> None:
         """Open the connection once before the first refresh."""
@@ -65,3 +72,15 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             await self.hass.async_add_executor_job(self.cube.update)
         except (OSError, TimeoutError) as err:
             raise UpdateFailed(f"Error communicating with MAX! Cube: {err}") from err
+
+    def device_status(self, rf_address: str) -> DeviceStatus:
+        """Return the RF link status for one device.
+
+        Falls back to an all-unknown, stale status while the Cube object has not
+        been built yet, so entities can always read a well-formed value.
+        """
+        if self.cube is None:
+            return DeviceStatus(
+                initialized=None, error=None, link_error=None, last_heard=None, stale=True
+            )
+        return self.cube.device_status(rf_address, self.stale_after)
