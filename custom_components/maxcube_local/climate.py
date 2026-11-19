@@ -37,6 +37,11 @@ from .entity import MaxCubeEntity
 
 PRESET_ON = "on"
 
+# Home Assistant 2026.11 renamed the temperature members of ClimateEntity to
+# native_* (the old names are deprecated and stop working in 2027.11). Older
+# versions only know the old names, so the right ones are chosen at import time.
+_NATIVE_TEMPERATURES = hasattr(ClimateEntity, "native_current_temperature")
+
 # Special target-temperature values the Cube uses to encode on/off states.
 ON_TEMPERATURE = 30.5
 OFF_TEMPERATURE = 4.5
@@ -63,7 +68,10 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     """A MAX! radiator or wall thermostat."""
 
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    if _NATIVE_TEMPERATURES:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     # The Cube reports the measured temperature in 0.1 °C; setpoints are 0.5 °C.
     _attr_precision = PRECISION_TENTHS
     _attr_target_temperature_step = PRECISION_HALVES
@@ -98,17 +106,39 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         """Return the maximum target temperature."""
         return self._device.max_temperature or MAX_TEMPERATURE
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _measured_temperature(self) -> float | None:
         """Return the measured temperature, if the device reports one."""
         temp = self._device.actual_temperature
         # Radiator thermostats report 0 until they have measured at least once.
         return temp if temp else None
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _target_temperature(self) -> float | None:
         """Return the target temperature."""
         return self._device.target_temperature
+
+    if _NATIVE_TEMPERATURES:
+
+        @property
+        def native_current_temperature(self) -> float | None:
+            """Return the measured temperature in the device's unit."""
+            return self._measured_temperature()
+
+        @property
+        def native_target_temperature(self) -> float | None:
+            """Return the target temperature in the device's unit."""
+            return self._target_temperature()
+
+    else:
+
+        @property
+        def current_temperature(self) -> float | None:
+            """Return the measured temperature."""
+            return self._measured_temperature()
+
+        @property
+        def target_temperature(self) -> float | None:
+            """Return the target temperature."""
+            return self._target_temperature()
 
     @property
     def extra_state_attributes(self) -> dict[str, float] | None:
