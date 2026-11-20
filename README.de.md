@@ -46,11 +46,15 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
 
 ## ⬇️ Installation (HACS)
 
-1. HACS → Drei-Punkte-Menü → **Benutzerdefinierte Repositories**.
-2. `https://github.com/Ebenhoeh80/ha-maxcube` hinzufügen, Kategorie **Integration**.
-3. **eQ-3 MAX! Cube** installieren, dann Home Assistant neu starten.
-4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → eQ-3 MAX! Cube**,
-   IP-Adresse des Cubes eingeben.
+1. In HACS nach **eQ-3 MAX! Cube** suchen und installieren.
+2. Home Assistant neu starten.
+3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → eQ-3 MAX! Cube**,
+   IP-Adresse des Cubes eingeben (sie ist vorausgefüllt, wenn der Cube automatisch gefunden wird).
+
+Findest du die Integration in HACS noch nicht, füge sie als benutzerdefiniertes
+Repository hinzu: HACS → Drei-Punkte-Menü → **Benutzerdefinierte Repositories**,
+`https://github.com/Ebenhoeh80/ha-maxcube` mit Kategorie **Integration** eintragen und
+dann wie oben installieren.
 
 (Alternativ `custom_components/maxcube_local` in den Ordner `config/custom_components`
 kopieren.)
