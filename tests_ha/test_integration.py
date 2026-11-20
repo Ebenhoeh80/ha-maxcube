@@ -766,3 +766,61 @@ async def test_two_quick_commands_are_read_back_within_a_few_seconds(
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
     assert cube.updates == before + 1
+
+
+@pytest.mark.parametrize("error", [OSError, TimeoutError, ConnectionResetError])
+async def test_a_command_that_cannot_reach_the_cube_is_a_translated_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, error: type[OSError]
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    cube.command_error = error
+    for service, data in (
+        ("set_temperature", {"temperature": 20.0}),
+        ("set_hvac_mode", {"hvac_mode": "auto"}),
+        ("set_preset_mode", {"preset_mode": "boost"}),
+    ):
+        with pytest.raises(HomeAssistantError) as raised:
+            await hass.services.async_call(
+                "climate", service, {"entity_id": entity_id, **data}, blocking=True
+            )
+        assert raised.value.translation_key == "cube_unreachable"
+        assert raised.value.translation_domain == DOMAIN
+        assert not isinstance(raised.value, OSError)
+
+
+async def test_a_command_the_cube_does_not_accept_is_a_translated_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    cube.accept_commands = False
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            "climate", "set_temperature", {"entity_id": entity_id, "temperature": 20.0}, blocking=True
+        )
+    assert raised.value.translation_key == "command_rejected"
+
+
+async def test_a_programme_write_that_cannot_reach_the_cube_is_a_translated_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+
+    def broken(*args: object) -> bool:
+        raise TimeoutError("timed out")
+
+    cube.write_day_schedule = broken  # type: ignore[method-assign]
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            "maxcube_local",
+            "set_schedule",
+            {
+                "entity_id": entity_id,
+                "days": ["monday"],
+                "periods": [{"until": "24:00", "temperature": 19.0}],
+            },
+            blocking=True,
+        )
+    assert raised.value.translation_key == "cube_unreachable"

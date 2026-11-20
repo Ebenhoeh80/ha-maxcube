@@ -157,6 +157,12 @@
     },
     "duplicate_cube": {
       "message": "Dieser MAX! Cube wird bereits vom Eintrag „{title}“ verwaltet. Bitte diesen doppelten Eintrag entfernen."
+    },
+    "cube_unreachable": {
+      "message": "Der Cube hat nicht geantwortet ({error}). Prüfen Sie, ob er eingeschaltet und erreichbar ist und keine andere App seine Verbindung belegt."
+    },
+    "command_rejected": {
+      "message": "Der Cube hat den Befehl nicht angenommen. Möglicherweise ist seine Funkzeit aufgebraucht; versuchen Sie es später noch einmal."
     }
   },
   "issues": {

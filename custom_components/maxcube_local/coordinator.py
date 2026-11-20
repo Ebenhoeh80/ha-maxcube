@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -148,14 +149,34 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 ) from err
             raise UpdateFailed(f"Error communicating with MAX! Cube: {err}") from err
 
-    async def async_cube_call(self, func: Callable[..., T], *args: Any) -> T:
-        """Run a blocking Cube call in the executor, one call at a time.
-
-        Polls, commands and programme writes would otherwise run in different threads on the same
-        connection object and could overlap; the Cube then refuses one of them.
-        """
+    async def _async_locked_call(self, func: Callable[..., T], *args: Any) -> T:
+        """Run a blocking Cube call in the executor, one call at a time (errors pass through)."""
         async with self._io_lock:
             return await self.hass.async_add_executor_job(func, *args)
+
+    async def async_cube_call(self, func: Callable[..., T], *args: Any) -> T:
+        """Run a blocking Cube call for a user action, one call at a time.
+
+        Polls, commands and programme writes would otherwise run in different threads on the same
+        connection object and could overlap; the Cube then refuses one of them. A network error
+        becomes a translated ``HomeAssistantError`` so that the user sees why an action failed
+        (the poll uses ``_async_locked_call`` and handles the raw error itself).
+        """
+        try:
+            return await self._async_locked_call(func, *args)
+        except (OSError, TimeoutError) as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="cube_unreachable",
+                translation_placeholders={"error": str(err) or type(err).__name__},
+            ) from err
+
+    async def async_cube_command(self, func: Callable[..., Any], *args: Any) -> None:
+        """Send a command to the Cube and raise if it does not accept it (returns a false value)."""
+        if not await self.async_cube_call(func, *args):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="command_rejected"
+            )
 
     async def _async_poll(self, cube: LinkStatusMaxCube) -> None:
         """Read the Cube, once more after a refused or dropped connection."""
@@ -163,11 +184,11 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         self.polls += 1
         try:
             try:
-                await self.async_cube_call(cube.update)
+                await self._async_locked_call(cube.update)
             except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as err:
                 _LOGGER.debug("The Cube dropped the connection (%s); trying once more", err)
                 await asyncio.sleep(POLL_RETRY_DELAY)
-                await self.async_cube_call(cube.update)
+                await self._async_locked_call(cube.update)
         except (OSError, TimeoutError):
             self.failed_polls += 1
             raise

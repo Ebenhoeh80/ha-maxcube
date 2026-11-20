@@ -157,6 +157,12 @@
     },
     "duplicate_cube": {
       "message": "This MAX! Cube is already managed by the entry \"{title}\". Remove this duplicate entry."
+    },
+    "cube_unreachable": {
+      "message": "The MAX! Cube did not answer ({error}). Check that it is switched on and reachable, and that no other app holds its connection."
+    },
+    "command_rejected": {
+      "message": "The Cube did not accept the command. Its radio time may be used up; try again later."
     }
   },
   "issues": {
