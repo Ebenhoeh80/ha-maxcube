@@ -56,6 +56,11 @@
     }
   },
   "entity": {
+    "button": {
+      "reboot": {
+        "name": "Restart Cube"
+      }
+    },
     "sensor": {
       "valve_position": {
         "name": "Valve position"

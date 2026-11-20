@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-20
+
+### Fixed
+- The reboot button had no name (it showed up as just "MAX! Cube"); it is called "Restart Cube" / "Cube neu starten" now.
+  The button stays disabled by default.
+
 ## [1.4.0] - 2026-11-20
 
 ### Added
