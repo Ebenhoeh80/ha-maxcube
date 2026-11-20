@@ -1,6 +1,115 @@
+// German/French/Spanish/Italian locales write decimals with a comma.
+const COMMA_LOCALE = /^(de|fr|es|it|pt|ru|nl|pl|tr|cs|da|sv|fi|no)/.test(
+  (typeof navigator !== "undefined" && navigator.language) || "en"
+);
+
+// Translation system
+const TRANSLATIONS = {
+  de: {
+    dayShort: { monday: "Mo", tuesday: "Di", wednesday: "Mi", thursday: "Do", friday: "Fr", saturday: "Sa", sunday: "So" },
+    dayLong: { monday: "Montag", tuesday: "Dienstag", wednesday: "Mittwoch", thursday: "Donnerstag", friday: "Freitag", saturday: "Samstag", sunday: "Sonntag" },
+    lastZoneCannotDelete: "Die letzte Zone kann nicht gelöscht werden.",
+    zoneTooShortToSplit: "Zone ist zu kurz zum Teilen.",
+    maxZonesReached: (n) => `Maximal ${n} Zonen pro Tag.`,
+    changesDiscarded: "Änderungen verworfen.",
+    noMaxThermostats: "Keine MAX!-Thermostate mit Wochenprogramm gefunden.",
+    noThermostatsFound: "keine Thermostate gefunden",
+    targetDevices: (n) => `Zielgeräte (${n})`,
+    unsavedChanges: "ungespeicherte Änderungen",
+    currentState: "Stand = Cube",
+    dryRun: "Dry-Run",
+    sending: "sendet…",
+    sendLabel: (days) => `${days} an Cube senden`,
+    statusDryRun: (days, count) => `Dry-Run: ${days} für ${count} Gerät(e) geprüft.`,
+    statusSent: (days, count) => `${days} an ${count} Gerät(e) gesendet.`,
+    statusFailed: (failed) => `Fehlgeschlagen: ${failed}`,
+    dayError: (day, errors) => `${day}: ${errors.join(", ")}`,
+    zoneError: (zone, msg) => `Zone ${zone}: ${msg}`,
+    noPeriods: "kein Eintrag",
+    maxPeriods: (n, actual) => `max. ${n} Zonen (${actual})`,
+    timeNotInSteps: (time) => `${time} nicht in 5-Min-Schritten`,
+    timeNotRising: (time) => `${time} nicht aufsteigend`,
+    badTemperature: (time) => `Temperatur ungültig`,
+    mustEndAtMidnight: "letzte Zone muss bei 24:00 enden",
+    zoneTooShortToSplit: "Zone ist zu kurz zum Teilen.",
+    maxZonesPerDay: (n) => `Maximal ${n} Zonen pro Tag.`,
+    zoneTooShortToSplitTime: "Zone ist zu kurz zum Teilen.",
+    tempError: (zone, temp) => `Zone ${zone}: Temperatur ungültig`,
+    copyNoTargets: "Keine Zieltage ausgewählt.",
+    copyDone: (day) => `${day} auf die gewählten Tage kopiert.`,
+    copyNoTargetsError: "Keine Zieltage ausgewählt.",
+    copyDoneMessage: (day) => `${day} auf die gewählten Tage kopiert.`,
+    dryRunLabel: "Dry-Run",
+    sendLabel: (days) => `${days} an Cube senden`,
+    unsavedChangesLabel: "ungespeicherte Änderungen",
+    currentStateLabel: "Stand = Cube",
+    targetDevicesLabel: (count) => `Zielgeräte (${count})`,
+    noThermostatsFoundLabel: "keine Thermostate gefunden",
+    copyTargetsLabel: (day) => `${day} kopieren nach`,
+    copyButton: "Kopieren",
+    dryRunLabelShort: "Dry-Run",
+    sendButton: (days) => `${days} an Cube senden`,
+    unsavedChangesShort: "ungespeicherte Änderungen",
+    currentStateShort: "Stand = Cube",
+    dryRunShort: "Dry-Run",
+  },
+  en: {
+    dayShort: { monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th", friday: "Fr", saturday: "Sa", sunday: "Su" },
+    dayLong: { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" },
+    lastZoneCannotDelete: "The last zone cannot be deleted.",
+    zoneTooShortToSplit: "Zone is too short to split.",
+    maxZonesReached: (n) => `Maximum ${n} zones per day.`,
+    changesDiscarded: "Changes discarded.",
+    noMaxThermostats: "No MAX! thermostats with weekly schedule found.",
+    noThermostatsFound: "no thermostats found",
+    targetDevices: (n) => `Target devices (${n})`,
+    unsavedChanges: "unsaved changes",
+    currentState: "State = Cube",
+    dryRun: "Dry-Run",
+    sending: "sending…",
+    sendLabel: (days) => `${days} to Cube`,
+    statusDryRun: (days, count) => `Dry-Run: ${days} for ${count} device(s) checked.`,
+    statusSent: (days, count) => `${days} sent to ${count} device(s).`,
+    statusFailed: (failed) => `Failed: ${failed}`,
+    dayError: (day, errors) => `${day}: ${errors.join(", ")}`,
+    zoneError: (zone, msg) => `Zone ${zone}: ${msg}`,
+    noPeriods: "no entry",
+    maxPeriods: (n, actual) => `max. ${n} zones (${actual})`,
+    timeNotInSteps: (time) => `${time} not in 5-min steps`,
+    timeNotRising: (time) => `${time} not ascending`,
+    badTemperature: (time) => `Temperature invalid`,
+    mustEndAtMidnight: "last zone must end at 24:00",
+    zoneTooShortToSplit: "Zone is too short to split.",
+    maxZonesPerDay: (n) => `Maximum ${n} zones per day.`,
+    zoneTooShortToSplitTime: "Zone is too short to split.",
+    tempError: (zone, temp) => `Zone ${zone}: temperature invalid`,
+    copyNoTargets: "No target days selected.",
+    copyDone: (day) => `${day} copied to selected days.`,
+    copyNoTargetsError: "No target days selected.",
+    copyDoneMessage: (day) => `${day} copied to selected days.`,
+    dryRunLabel: "Dry-Run",
+    sendLabel: (days) => `${days} to Cube`,
+    unsavedChangesLabel: "unsaved changes",
+    currentStateLabel: "State = Cube",
+    targetDevicesLabel: (count) => `Target devices (${count})`,
+    noThermostatsFoundLabel: "no thermostats found",
+    copyTargetsLabel: (day) => `Copy ${day} to`,
+    copyButton: "Copy",
+    dryRunLabelShort: "Dry-Run",
+    sendButton: (days) => `${days} to Cube`,
+    unsavedChangesShort: "unsaved changes",
+    currentStateShort: "State = Cube",
+    dryRunShort: "Dry-Run",
+  },
+};
+
+// Get translation object based on browser language
+const LANG = ((typeof navigator !== "undefined" && navigator.language) || "en").startsWith("de") ? "de" : "en";
+const T = TRANSLATIONS[LANG];
+
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const DAY_SHORT = { monday: "Mo", tuesday: "Di", wednesday: "Mi", thursday: "Do", friday: "Fr", saturday: "Sa", sunday: "So" };
-const DAY_LONG = { monday: "Montag", tuesday: "Dienstag", wednesday: "Mittwoch", thursday: "Donnerstag", friday: "Freitag", saturday: "Samstag", sunday: "Sonntag" };
+const DAY_SHORT = T.dayShort;
+const DAY_LONG = T.dayLong;
 
 const MAX_ZONES = 7;       // the Cube accepts at most seven setpoints per write
 const MIN_TEMP = 4.5;
@@ -29,11 +138,6 @@ const fmt = (mins) => {
 
 const snap = (mins, step = SNAP) => Math.round(mins / step) * step;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-// German/French/Spanish/Italian locales write decimals with a comma.
-const COMMA_LOCALE = /^(de|fr|es|it|pt|ru|nl|pl|tr|cs|da|sv|fi|no)/.test(
-  (typeof navigator !== "undefined" && navigator.language) || "en"
-);
 
 const fmtTemp = (t) => {
   const s = String(t);
@@ -101,23 +205,23 @@ function normalize(days) {
 
 function validateDay(periods) {
   const errs = [];
-  if (!periods.length) errs.push("kein Eintrag");
-  if (periods.length > MAX_ZONES) errs.push(`max. ${MAX_ZONES} Zonen (${periods.length})`);
+  if (!periods.length) errs.push(T.noPeriods);
+  if (periods.length > MAX_ZONES) errs.push(T.maxPeriods(MAX_ZONES, periods.length));
   let prev = 0;
   periods.forEach((p, i) => {
     const m = toMin(p.until);
     if (Number.isNaN(m)) {
-      errs.push(`Zone ${i + 1}: ungültige Zeit`);
+      errs.push(T.zoneError(i + 1, "ungültige Zeit"));
       return;
     }
-    if (m % 5) errs.push(`Zone ${i + 1}: ${p.until} nicht in 5-Min-Schritten`);
-    if (m <= prev) errs.push(`Zone ${i + 1}: Zeit nicht aufsteigend`);
+    if (m % 5) errs.push(T.timeNotInSteps(p.until));
+    if (m <= prev) errs.push(T.timeNotRising(p.until));
     prev = m;
     if (!(p.temp >= MIN_TEMP && p.temp <= MAX_TEMP) || (p.temp * 2) % 1) {
-      errs.push(`Zone ${i + 1}: Temperatur ungültig`);
+      errs.push(T.tempError(i + 1, p.temp));
     }
   });
-  if (prev !== END) errs.push("letzte Zone muss bei 24:00 enden");
+  if (prev !== END) errs.push(T.mustEndAtMidnight);
   return errs;
 }
 
@@ -137,6 +241,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     this._dirty = false;
     this._drag = null;
     this._suppressClick = false;
+    this._changedDays = new Set();
     this._onMove = this._onDragMove.bind(this);
     this._onUp = this._onDragEnd.bind(this);
   }
@@ -270,9 +375,13 @@ class MaxCubeScheduleCard extends HTMLElement {
     const p = this._periods()[this._sel.zone];
     if (!p) return;
     if (!Number.isNaN(m)) {
+      const oldUntil = p.until;
       p.until = fmt(m);
       el.value = fmt(m);
       this._dirty = true;
+      if (oldUntil !== p.until) {
+        this._changedDays.add(this._sel.day);
+      }
     }
     this._render();
   }
@@ -288,7 +397,7 @@ class MaxCubeScheduleCard extends HTMLElement {
   _deleteZone() {
     const list = this._periods();
     if (list.length <= 1) {
-      this._status = { kind: "warn", text: "Die letzte Zone kann nicht gelöscht werden." };
+      this._status = { kind: "warn", text: T.lastZoneCannotDelete };
       this._render();
       return;
     }
@@ -305,7 +414,7 @@ class MaxCubeScheduleCard extends HTMLElement {
   _addZone() {
     const list = this._periods();
     if (list.length >= MAX_ZONES) {
-      this._status = { kind: "warn", text: `Maximal ${MAX_ZONES} Zonen pro Tag.` };
+      this._status = { kind: "warn", text: T.maxZonesReached(MAX_ZONES) };
       this._render();
       return;
     }
@@ -314,14 +423,14 @@ class MaxCubeScheduleCard extends HTMLElement {
     const start = i === 0 ? 0 : toMin(list[i - 1].until);
     const end = toMin(p.until);
     if (Number.isNaN(start) || Number.isNaN(end) || end - start < 10) {
-      this._status = { kind: "warn", text: "Zone ist zu kurz zum Teilen." };
+      this._status = { kind: "warn", text: T.zoneTooShortToSplit };
       this._render();
       return;
     }
     let mid = snap(start + (end - start) / 2, 15);
     if (mid <= start || mid >= end) mid = start + 5;
     if (mid <= start || mid >= end) {
-      this._status = { kind: "warn", text: "Zone ist zu kurz zum Teilen." };
+      this._status = { kind: "warn", text: T.zoneTooShortToSplit };
       this._render();
       return;
     }
@@ -335,7 +444,7 @@ class MaxCubeScheduleCard extends HTMLElement {
 
   _copyDay() {
     if (!this._copyTargets.size) {
-      this._status = { kind: "warn", text: "Keine Zieltage ausgewählt." };
+      this._status = { kind: "warn", text: T.copyNoTargets };
       this._render();
       return;
     }
@@ -346,7 +455,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     }
     this._copyTargets.clear();
     this._dirty = true;
-    this._status = { kind: "ok", text: `${DAY_LONG[this._sel.day]} auf die gewählten Tage kopiert.` };
+    this._status = { kind: "ok", text: T.copyDone(DAY_LONG[this._sel.day]) };
     this._render();
   }
 
@@ -359,7 +468,8 @@ class MaxCubeScheduleCard extends HTMLElement {
   _revert() {
     this._days = normalize(this._hass?.states[this._entity]?.attributes?.schedule);
     this._dirty = false;
-    this._status = { kind: "info", text: "Änderungen verworfen." };
+    this._changedDays.clear();
+    this._status = { kind: "info", text: T.changesDiscarded };
     this._render();
   }
 
@@ -423,6 +533,8 @@ class MaxCubeScheduleCard extends HTMLElement {
     if (delta === 0 && !d.moved) return;
     d.moved = true;
     this._applyDrag(d, delta);
+    // Show live time during drag on the zone itself
+    this._updateLiveDragDisplay(d);
     this._repaint();
   }
 
@@ -439,7 +551,29 @@ class MaxCubeScheduleCard extends HTMLElement {
     this._suppressClick = true;
     setTimeout(() => { this._suppressClick = false; }, 0);
     this._dirty = true;
+    // Mark the day as changed
+    this._changedDays.add(d.day);
     this._render();
+  }
+
+  _updateLiveDragDisplay(d) {
+    // Show live time during drag by updating the zone's tooltip/label
+    const day = d.day;
+    const idx = d.idx;
+    const list = this._days[day];
+    if (!list || !list[idx]) return;
+
+    const zoneEl = this.querySelector(`.zone[data-day="${day}"][data-zone="${idx}"]`);
+    if (!zoneEl) return;
+
+    const p = list[idx];
+    const start = idx === 0 ? 0 : toMin(this._days[day][idx - 1]?.until || "00:00");
+    const end = toMin(p.until);
+    const label = `${fmt(start)}–${end}: ${fmtTemp(p.temp)} °C`;
+
+    zoneEl.title = label;
+    const t = zoneEl.querySelector(".zt");
+    if (t) t.textContent = `${fmtTemp(p.temp)}°`;
   }
 
   // Zones are contiguous ({until} model): a boundary is shared by two zones.
@@ -496,63 +630,69 @@ class MaxCubeScheduleCard extends HTMLElement {
     if (this._busy) return;
     const targets = [...this._targets].filter((id) => this._hass?.states[id]);
     if (!targets.length) {
-      this._status = { kind: "warn", text: "Kein Gerät ausgewählt." };
+      this._status = { kind: "warn", text: T.noTargetDevice };
       this._render();
       return;
     }
 
-    const plan = {};
+    // Validate all days
     for (const d of DAYS) {
       const errs = validateDay(this._periods(d));
       if (errs.length) {
-        this._status = { kind: "error", text: `${DAY_LONG[d]}: ${errs.join(", ")}` };
+        this._status = { kind: "error", text: T.dayError(DAY_LONG[d], errs) };
         this._render();
         return;
       }
-      plan[d] = this._periods(d);
     }
 
-    const periods = plan[this._sel.day].map((p) => ({
-      until: p.until,
-      temperature: p.temp,
-    }));
+    // Only send days that have been changed (or all if none explicitly changed)
+    const changedDays = this._changedDays.size > 0
+      ? [...this._changedDays]
+      : DAYS;
 
-    // set_schedule writes one day at a time, so the editor sends the selected day.
     this._busy = true;
     this._render();
 
-    const results = [];
+    const allResults = [];
     try {
       for (const entity of targets) {
-        const res = await this._hass.callService(
-          "maxcube_local",
-          "set_schedule",
-          { days: [this._sel.day], periods, dry_run: this._dry },
-          { entity_id: entity }
-        );
-        const payload = res?.response ?? res ?? {};
-        const per = payload.result || {};
-        results.push({
-          entity,
-          day: this._sel.day,
-          // A dry-run is a successful check, not a failure.
-          ok: this._dry ? true : per[this._sel.day] !== "failed",
-          raw: this._dry ? "dry-run" : per[this._sel.day] || "ok",
-        });
+        for (const day of changedDays) {
+          const periods = this._periods(day).map((p) => ({
+            until: p.until,
+            temperature: p.temp,
+          }));
+
+          const res = await this._hass.callService(
+            "maxcube_local",
+            "set_schedule",
+            { days: [day], periods, dry_run: this._dry },
+            { entity_id: entity }
+          );
+          const payload = res?.response ?? res ?? {};
+          const per = payload.result || {};
+          allResults.push({
+            entity,
+            day,
+            // A dry-run is a successful check, not a failure.
+            ok: this._dry ? true : per[day] !== "failed",
+            raw: this._dry ? "dry-run" : per[day] || "ok",
+          });
+        }
       }
-      const failed = results.filter((r) => !r.ok);
+      const failed = allResults.filter((r) => !r.ok);
       this._status = {
         kind: failed.length ? "error" : "ok",
         text: this._dry
-          ? `Dry-Run: ${DAY_LONG[this._sel.day]} für ${results.length} Gerät(e) geprüft.`
+          ? T.statusDryRun(changedDays.map(d => DAY_SHORT[d]).join(", "), targets.length)
           : failed.length
-            ? `Fehlgeschlagen für: ${failed.map((r) => this._name(r.entity)).join(", ")}`
-            : `${DAY_LONG[this._sel.day]} an ${results.length} Gerät(e) gesendet.`,
+            ? T.statusFailed(failed.map((r) => `${this._name(r.entity)} (${DAY_SHORT[r.day]})`).join(", "))
+            : T.statusSent(changedDays.map(d => DAY_SHORT[d]).join(", "), targets.length),
         ts: new Date(),
-        results,
+        results: allResults,
       };
       if (!this._dry && !failed.length) {
         this._dirty = false;
+        this._changedDays.clear();
         // Ask HA to re-read the Cube so the card shows what was actually stored.
         setTimeout(() => {
           for (const entity of targets) {
@@ -586,16 +726,18 @@ class MaxCubeScheduleCard extends HTMLElement {
           const w = valid ? Math.max(0, ((cursor - start) / END) * 100) : 0;
           const sel = this._sel.day === day && this._sel.zone === i;
           const label = `${fmt(start)}–${valid ? fmt(end) : "?"}: ${fmtTemp(p.temp)} °C`;
-          return `<div class="zone${sel ? " sel" : ""}" data-day="${day}" data-zone="${i}"
+          const changed = this._changedDays.has(day);
+          return `<div class="zone${sel ? " sel" : ""}${changed ? " changed" : ""}" data-day="${day}" data-zone="${i}"
             style="width:${w}%;background:${tempColor(p.temp)}" title="${label}">
             <div class="edge l" data-edge="start"></div>
             <span class="zt">${fmtTemp(p.temp)}°</span>
             <div class="edge r" data-edge="end"></div>
+            ${changed ? '<span class="changed-dot" title="Geändert"></span>' : ""}
           </div>`;
         })
         .join("");
 
-      return `<div class="day${this._sel.day === day ? " active" : ""}" data-day="${day}">
+      return `<div class="day${this._sel.day === day ? " active" : ""}${this._changedDays.has(day) ? " day-changed" : ""}" data-day="${day}">
         <div class="dl">${DAY_SHORT[day]}</div>
         <div class="track">${segs}</div>
         <div class="dstat">${this._dayStatus(day)}</div>
@@ -627,7 +769,7 @@ class MaxCubeScheduleCard extends HTMLElement {
 
     return `<div class="editor">
       <div class="row">
-        <label>Zone ${idx + 1} / ${list.length}</label>
+        <label>${T.zoneError ? "Zone" : "Zone"} ${idx + 1} / ${list.length}</label>
         <span class="span">${fmt(start)} – ${badTime ? "?" : fmt(end)}</span>
       </div>
       <div class="row">
@@ -642,13 +784,12 @@ class MaxCubeScheduleCard extends HTMLElement {
         <label>Ende</label>
         <input type="text" class="tin time" value="${p.until}" data-act="until" inputmode="numeric"
           placeholder="HH:MM" spellcheck="false">
-        ${offGrid ? '<span class="warn">nicht in 5-Min-Schritten</span>' : ""}
+        ${offGrid ? `<span class="warn">${T.scheduleTimeError(p.until)}</span>` : ""}
       </div>
-      <div class="row hint">Zonen am linken/rechten Rand ziehen, um Anfang/Ende zu ändern. In der Mitte ziehen, um die ganze Zone zu schieben (Raster 15 Min).</div>
       <div class="row">
         <button class="btn" data-act="add" ${list.length >= MAX_ZONES ? "disabled" : ""}>Zone teilen</button>
         <button class="btn danger" data-act="del" ${list.length <= 1 ? "disabled" : ""}>Zone löschen</button>
-        <button class="btn ghost" data-act="revert">Verwerfen</button>
+        <button class="btn ghost" data-act="revert">${T.dryRunLabelShort}</button>
       </div>
     </div>`;
   }
@@ -662,9 +803,9 @@ class MaxCubeScheduleCard extends HTMLElement {
       </label>`
     ).join("");
     return `<div class="block">
-      <div class="bh">${DAY_LONG[this._sel.day]} kopieren nach</div>
+      <div class="bh">${T.copyTargetsLabel(DAY_LONG[this._sel.day])}</div>
       <div class="cbs">${boxes}</div>
-      <button class="btn" data-act="copy">Kopieren</button>
+      <button class="btn" data-act="copy">${T.copyButton}</button>
     </div>`;
   }
 
@@ -679,8 +820,8 @@ class MaxCubeScheduleCard extends HTMLElement {
       )
       .join("");
     return `<div class="block">
-      <div class="bh">Zielgeräte (${this._targets.size})</div>
-      <div class="cbs targets">${items || '<span class="muted">keine Thermostate gefunden</span>'}</div>
+      <div class="bh">${T.targetDevicesLabel(this._targets.size)}</div>
+      <div class="cbs targets">${items || `<span class="muted">${T.noThermostatsFoundLabel}</span>`}</div>
     </div>`;
   }
 
@@ -706,7 +847,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     const ids = this._scheduleEntities();
 
     if (!ids.length) {
-      this.innerHTML = `<ha-card><div class="pad">Keine MAX!-Thermostate mit Wochenprogramm gefunden.</div></ha-card>`;
+      this.innerHTML = `<ha-card><div class="pad">${T.noMaxThermostats}</div></ha-card>`;
       return;
     }
     if (!this._days) this._syncFromState();
@@ -773,6 +914,7 @@ class MaxCubeScheduleCard extends HTMLElement {
         .zone:hover { filter: brightness(1.1); }
         .zone.sel { box-shadow: inset 0 0 0 2px var(--primary-text-color, #fff); }
         .zone.dragging { cursor: grabbing; filter: brightness(1.15); z-index: 3; }
+        .zone.changed { box-shadow: inset 0 0 0 2px var(--primary-color, #03a9f4); }
         .zone .edge {
           position: absolute; top: 0; bottom: 0; width: 10px; z-index: 2; cursor: ew-resize;
         }
@@ -782,79 +924,86 @@ class MaxCubeScheduleCard extends HTMLElement {
         .zt { white-space: nowrap; pointer-events: none; }
         .dstat { width: 16px; flex: 0 0 16px; text-align: right; }
         .bad { color: var(--error-color, #db4437); font-weight: 700; font-size: 11px; }
-        .legend { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; font-size: 11px;
-          color: var(--secondary-text-color, #727272); }
-        .scale { flex: 1; height: 9px; border-radius: 4px; }
-        .editor { margin-top: 8px; padding: 8px; border-radius: 6px;
-          background: var(--secondary-background-color, #f7f7f7); }
-        .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
-        .row label { font-size: 12px; color: var(--secondary-text-color, #727272); min-width: 84px; }
-        .row.hint { font-size: 11px; color: var(--secondary-text-color, #727272); }
-        .span { font-size: 12px; }
-        .unit { font-size: 12px; color: var(--secondary-text-color, #727272); }
-        .tin {
-          width: 74px; padding: 3px 6px; font: inherit; font-size: 13px;
-          border: 1px solid var(--divider-color, #ccc); border-radius: 4px;
-          background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121);
+        .day-changed .dl { color: var(--primary-color, #03a9f4); font-weight: 700; }
+        .changed-dot {
+          position: absolute; top: 2px; right: 2px; width: 6px; height: 6px;
+          border-radius: 50%; background: var(--primary-color, #03a9f4);
+          box-shadow: 0 0 2px var(--primary-color, #03a9f4);
         }
-        .tin.time { width: 84px; }
-        .btn {
-          padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer;
-          border: 1px solid var(--divider-color, #ccc); border-radius: 4px;
-          background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121);
-        }
-        .btn:hover { background: var(--secondary-background-color, #eee); }
-        .btn.sm { padding: 2px 7px; }
-        .btn.ghost { border-style: dashed; }
-        .btn.danger { color: var(--error-color, #db4437); }
-        .btn[disabled] { opacity: .45; cursor: not-allowed; }
-        .warn { color: var(--warning-color, #ff9800); font-size: 11px; }
-        .block { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color, #eee); }
-        .bh { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-        .cbs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-        .cb {
-          display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px;
-          border: 1px solid var(--divider-color, #ccc); border-radius: 12px;
-          font-size: 12px; cursor: pointer;
-        }
-        .cb.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff);
-          border-color: transparent; }
-        .cb input { margin: 0; }
-        .cbs.targets .cb { font-size: 11px; }
-        .muted { color: var(--secondary-text-color, #727272); font-size: 11px; }
-        .status { margin-top: 10px; padding: 8px; border-radius: 6px; font-size: 12px; }
-        .status.ok { background: rgba(76,175,80,.14); color: var(--primary-text-color, #212121); }
-        .status.warn { background: rgba(255,152,0,.16); }
-        .status.error { background: rgba(219,68,55,.14); }
-        .status ul { margin: 4px 0 0; padding-left: 16px; }
-        .actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-        .actions .spacer { flex: 1; }
-        .chk { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
-      </style>
-      <ha-card>
-        <div class="tabs">${tabs}</div>
-        <div class="wrap">
-          ${this._renderGrid()}
-          <div class="legend">
-            <span>${fmtTemp(MIN_TEMP)} °C</span>
-            <div class="scale" style="background:${LEGEND_GRADIENT}"></div>
-            <span>${fmtTemp(MAX_TEMP)} °C</span>
-          </div>
-          ${this._renderEditor()}
-          ${this._renderCopy()}
-          ${this._renderTargets()}
-          <div class="actions">
-            <label class="chk"><input type="checkbox" data-act="dry" ${this._dry ? "checked" : ""}> Dry-Run</label>
-            <span class="spacer"></span>
-            <span class="muted" data-dirty>${this._dirty ? "ungespeicherte Änderungen" : "Stand = Cube"}</span>
-            <button class="btn" data-act="send" ${this._busy ? "disabled" : ""}>
-              ${this._busy ? "sendet…" : `${DAY_SHORT[this._sel.day]} an Cube senden`}
-            </button>
-          </div>
-          ${this._renderStatus()}
-        </div>
-      </ha-card>
-    `;
+        .dstat { width: 16px; flex: 0 0 16px; text-align: right; }
+        <legend { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; font-size: 11px;
+                  color: var(--secondary-text-color, #727272); }
+                .scale { flex: 1; height: 9px; border-radius: 4px; }
+                .editor { margin-top: 8px; padding: 8px; border-radius: 6px;
+                  background: var(--secondary-background-color, #f7f7f7); }
+                .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
+                .row label { font-size: 12px; color: var(--secondary-text-color, #727272); min-width: 84px; }
+                .row.hint { font-size: 11px; color: var(--secondary-text-color, #727272); }
+                .span { font-size: 12px; }
+                .unit { font-size: 12px; color: var(--secondary-text-color, #727272); }
+                .tin {
+                  width: 74px; padding: 3px 6px; font: inherit; font-size: 13px;
+                  border: 1px solid var(--divider-color, #ccc); border-radius: 4px;
+                  background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121);
+                }
+                .tin.time { width: 84px; }
+                .btn {
+                  padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer;
+                  border: 1px solid var(--divider-color, #ccc); border-radius: 4px;
+                  background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121);
+                }
+                .btn:hover { background: var(--secondary-background-color, #eee); }
+                .btn.sm { padding: 2px 7px; }
+                .btn.ghost { border-style: dashed; }
+                .btn.danger { color: var(--error-color, #db4437); }
+                .btn[disabled] { opacity: .45; cursor: not-allowed; }
+                .warn { color: var(--warning-color, #ff9800); font-size: 11px; }
+                .block { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color, #eee); }
+                .bh { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+                .cbs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+                .cb {
+                  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px;
+                  border: 1px solid var(--divider-color, #ccc); border-radius: 12px;
+                  font-size: 12px; cursor: pointer;
+                }
+                .cb.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff);
+                  border-color: transparent; }
+                .cb input { margin: 0; }
+                .cbs.targets .cb { font-size: 11px; }
+                .muted { color: var(--secondary-text-color, #727272); font-size: 11px; }
+                .status { margin-top: 10px; padding: 8px; border-radius: 6px; font-size: 12px; }
+                .status.ok { background: rgba(76,175,80,.14); color: var(--primary-text-color, #212121); }
+                .status.warn { background: rgba(255,152,0,.16); }
+                .status.error { background: rgba(219,68,55,.14); }
+                .status ul { margin: 4px 0 0; padding-left: 16px; }
+                .actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+                .actions .spacer { flex: 1; }
+                .chk { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+              </style>
+              <ha-card>
+                <div class="tabs">${tabs}</div>
+                <div class="wrap">
+                  ${this._renderGrid()}
+                  <div class="legend">
+                    <span>${fmtTemp(MIN_TEMP)} °C</span>
+                    <div class="scale" style="background:${LEGEND_GRADIENT}"></div>
+                    <span>${fmtTemp(MAX_TEMP)} °C</span>
+                  </div>
+                  ${this._renderEditor()}
+                  ${this._renderCopy()}
+                  ${this._renderTargets()}
+                  <div class="actions">
+                    <label class="chk"><input type="checkbox" data-act="dry" ${this._dry ? "checked" : ""}> ${T.dryRunLabelShort}</label>
+                    <span class="spacer"></span>
+                    <span class="muted" data-dirty>${this._dirty ? T.unsavedChangesShort : T.currentStateShort}</span>
+                    <button class="btn" data-act="send" ${this._busy ? "disabled" : ""}>
+                      ${this._busy ? T.sending : `${this._getSendLabel()} ${T.sendButton("")}`}
+                    </button>
+                  </div>
+                  ${this._renderStatus()}
+                </div>
+              </ha-card>
+            `;
 
     this._wire();
   }
@@ -979,6 +1128,13 @@ class MaxCubeScheduleCard extends HTMLElement {
 
     const send = this.querySelector('[data-act="send"]');
     if (send) send.addEventListener("click", () => this._send());
+  }
+
+  _getSendLabel() {
+    const days = this._changedDays.size > 0
+      ? [...this._changedDays]
+      : DAYS;
+    return days.map(d => DAY_SHORT[d]).join(", ");
   }
 
   getCardSize() {
