@@ -984,3 +984,66 @@ async def test_the_cube_repair_hints_are_removed_when_the_entry_unloads(
         assert await hass.config_entries.async_unload(config_entry.entry_id)
         await hass.async_block_till_done()
     assert not _cube_issues(hass)
+
+
+async def _write_monday(hass: HomeAssistant, entity_id: str, temperature: float) -> None:
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {
+            "entity_id": entity_id,
+            "days": ["monday"],
+            "periods": [{"until": "24:00", "temperature": temperature}],
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+
+async def test_every_programme_write_keeps_one_check_and_no_callback_behind(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    coordinator = config_entry.runtime_data
+    cube.store_writes = False
+    registered = len(config_entry._on_unload or [])
+
+    for temperature in (18.0, 19.0, 20.0):
+        await _write_monday(hass, entity_id, temperature)
+
+    assert len(coordinator._verify_timers) == 1
+    assert len(config_entry._on_unload or []) == registered  # nothing added per write
+    # The newest programme is the one that gets checked.
+    assert coordinator._verify_days[RADIATOR]["monday"][0]["temp"] == 20.0
+
+
+async def test_the_lifecycle_leaves_no_tasks_or_listeners_behind(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+    from homeassistant.helpers import issue_registry as ir
+
+    await _setup(hass, config_entry)
+    first = config_entry.runtime_data
+    cube.store_writes = False
+    await _write_monday(hass, _entity_id(hass, "climate", RADIATOR), 18.0)
+    assert first._verify_timers
+
+    # Reload: the old coordinator is shut down completely, a new one runs.
+    assert await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert config_entry.runtime_data is not first
+    assert not first._verify_timers and not first._listeners
+
+    # Home Assistant stops, then the entries are unloaded.
+    second = config_entry.runtime_data
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.NOT_LOADED
+    assert not second._verify_timers and not second._listeners
+    assert second._unsub_refresh is None
+    assert not [1 for (domain, _) in ir.async_get(hass).issues if domain == DOMAIN]

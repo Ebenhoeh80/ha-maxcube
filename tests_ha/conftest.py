@@ -145,6 +145,7 @@ class FakeCube:
         self._guard = threading.Lock()
         self.errors: dict[str, bool] = {}
         self.accept_writes = True
+        self.store_writes = True  # False: the Cube takes the message but shows the old programme
         # Commands (target temperature, mode): raise this error, or answer with False.
         self.command_error: type[OSError] | None = None
         self.accept_commands = True
@@ -196,7 +197,7 @@ class FakeCube:
 
     def write_day_schedule(self, thermostat: Any, day: str, slots: list[dict[str, Any]]) -> bool:
         self.written.append((thermostat.rf_address, day, slots))
-        if self.accept_writes:
+        if self.accept_writes and self.store_writes:
             thermostat.schedule[day] = slots  # the Cube would show it after a while; here at once
         return self.accept_writes
 

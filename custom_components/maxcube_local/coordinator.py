@@ -17,7 +17,7 @@ from typing import Any, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
@@ -78,9 +78,17 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         self._host = host
         self._port = port
         self._last_rediscovery = float("-inf")
+        # Two locks with two jobs; they cannot be merged. ``_io_lock`` makes every single call to
+        # the Cube (which accepts one connection at a time) wait for the one before. ``_write_lock``
+        # keeps a whole programme write (send, then read back) together so that two writes do not
+        # interleave; it is held while the read-back takes ``_io_lock``, so one lock for both would
+        # block itself.
         self._write_lock = asyncio.Lock()
-        # The Cube accepts one connection at a time: every call to it goes through this lock.
         self._io_lock = asyncio.Lock()
+        # Pending "was the programme taken?" checks, one timer per device (see async_write_schedule).
+        self._verify_timers: dict[str, Callable[[], None]] = {}
+        self._verify_days: dict[str, dict[str, list[dict]]] = {}
+        entry.async_on_unload(self._cancel_verifications)
         # What the last polls cost (shown in the diagnostics).
         self.last_poll_ms: int | None = None
         self.polls = 0
@@ -268,14 +276,43 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 results[day] = "sent_not_confirmed" if sent[day] else "failed"
         pending = {day: days[day] for day, result in results.items() if result == "sent_not_confirmed"}
         if pending:
-
-            async def _verify(_now: datetime) -> None:
-                await self._async_verify_schedule(device, pending)
-
-            self.config_entry.async_on_unload(
-                async_call_later(self.hass, SCHEDULE_VERIFY_DELAY, _verify)
-            )
+            self._schedule_verification(device, pending)
         return results
+
+    def _schedule_verification(self, device: MaxDevice, pending: dict[str, list[dict]]) -> None:
+        """Check the days in ``pending`` again later; one timer per device, replaced by a new write.
+
+        A second write to the same device before the check merges its days into the same check
+        (the newer programme of a day wins) and restarts the wait, so nothing is verified twice and
+        no callback is left behind for every write.
+        """
+        address = device.rf_address
+        cancel = self._verify_timers.pop(address, None)
+        if cancel is not None:
+            cancel()
+        self._verify_days[address] = {**self._verify_days.get(address, {}), **pending}
+
+        async def _verify(_now: datetime) -> None:
+            self._verify_timers.pop(address, None)
+            days = self._verify_days.pop(address, {})
+            await self._async_verify_schedule(device, days)
+
+        self._verify_timers[address] = async_call_later(
+            self.hass, SCHEDULE_VERIFY_DELAY, _verify
+        )
+
+    @callback
+    def _cancel_verifications(self) -> None:
+        """Drop the pending programme checks (the entry is unloaded)."""
+        for cancel in self._verify_timers.values():
+            cancel()
+        self._verify_timers.clear()
+        self._verify_days.clear()
+
+    async def async_shutdown(self) -> None:
+        """Stop the coordinator, including the pending programme checks."""
+        self._cancel_verifications()
+        await super().async_shutdown()
 
     async def _async_verify_schedule(
         self, device: MaxDevice, days: dict[str, list[dict]]
