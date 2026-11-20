@@ -87,6 +87,7 @@ class DeviceStatus:
     link_error: bool | None
     last_heard: datetime | None
     stale: bool
+    raw_flags: str | None = None
 
 
 class LinkStatusMaxCube(MaxCubeWithStatus):
@@ -109,6 +110,7 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
         self.device_error: dict[str, bool] = {}
         self.link_error: dict[str, bool] = {}
         self.last_heard: dict[str, datetime] = {}
+        self.raw_flags: dict[str, str] = {}
         super().__init__(host, port, now)
 
     def parse_l_message(self, message: str) -> None:
@@ -136,6 +138,8 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
                 self.initialized[rf_address] = bool(bits1 & BIT_INITIALIZED)
                 self.device_error[rf_address] = bool(bits1 & BIT_ERROR)
                 self.link_error[rf_address] = bool(bits2 & BIT_LINK_ERROR)
+                # The bit layout is empirical (see the module docstring); keep the raw bytes for diagnosis.
+                self.raw_flags[rf_address] = f"{bits1:02x}{bits2:02x}"
             pos += length + 1
 
     def device_status(self, rf_address: str, stale_after: float) -> DeviceStatus:
@@ -157,4 +161,5 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
             link_error=self.link_error.get(rf_address),
             last_heard=last_heard,
             stale=stale,
+            raw_flags=self.raw_flags.get(rf_address),
         )

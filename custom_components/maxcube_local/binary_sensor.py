@@ -108,11 +108,17 @@ class MaxCubeDeviceStatus(MaxCubeEntity, BinarySensorEntity):
             return None
         return value == self._problem_value
 
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Expose the raw flag bytes (hex) the bit was read from, for diagnosis."""
+        return {"raw_flags": self.coordinator.device_status(self._rf_address).raw_flags}
+
 
 class MaxCubeUninitialized(MaxCubeDeviceStatus, BinarySensorEntity):
     """Device is paired with the Cube but has never delivered a config."""
 
     _attr_translation_key = "uninitialized"
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _bit_name = "initialized"
     # No "initialized" bit means the device never reported a configuration.
@@ -140,6 +146,7 @@ class MaxCubeRadioFault(MaxCubeDeviceStatus, BinarySensorEntity):
     """
 
     _attr_translation_key = "radio_fault"
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _bit_name = "link_error"
     _problem_value = True
@@ -156,8 +163,11 @@ class MaxCubeStale(MaxCubeDeviceStatus, BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         """Expose when the device was last heard, for graphing and templates."""
-        last_heard = self.coordinator.device_status(self._rf_address).last_heard
-        return {"last_heard": last_heard.isoformat() if last_heard else None}
+        status = self.coordinator.device_status(self._rf_address)
+        return {
+            "last_heard": status.last_heard.isoformat() if status.last_heard else None,
+            "raw_flags": status.raw_flags,
+        }
 
 
 class MaxCubeConnectivity(CoordinatorEntity[MaxCubeCoordinator], BinarySensorEntity):

@@ -66,7 +66,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
 
     def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
-        cube = LinkStatusMaxCube(self._host, self._port, now=dt_util.utcnow)
+        cube = LinkStatusMaxCube(self._host, self._port, now=dt_util.now)
         # From now on every poll opens its own short connection (see the module docstring).
         cube.use_persistent_connection = False
         cube.disconnect()

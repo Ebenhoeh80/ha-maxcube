@@ -57,6 +57,8 @@ class MaxCubeRebootButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "reboot"
     _attr_icon = "mdi:restart"
+    # A press restarts the Cube, so it must be switched on deliberately.
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: MaxCubeCoordinator) -> None:
         """Initialize the button on the Cube's hub device."""
