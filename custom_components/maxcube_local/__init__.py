@@ -28,6 +28,7 @@ from .const import (
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .discovery import discover_cubes, is_reachable
 from .identity import cube_title, is_generated_title
+from .issues import async_setup_issues
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -175,6 +176,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
     applied = (dict(entry.options), entry.data[CONF_HOST])
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async_setup_issues(hass, entry)
     # Reload when the options or the address changed (the way Home Assistant wants it: the update
     # listener schedules the reload). A change of the identity or title does not need one.
     async def _reload_on_change(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:

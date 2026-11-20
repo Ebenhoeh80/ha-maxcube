@@ -280,6 +280,41 @@ async def test_the_entry_unloads_cleanly(
     assert config_entry.state is ConfigEntryState.NOT_LOADED
 
 
+async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from homeassistant.helpers import issue_registry as ir
+
+    cube.devices[0].battery = 1
+    cube.errors[RADIATOR] = True
+    await _setup(hass, config_entry)
+    registry = ir.async_get(hass)
+    ids = {issue_id for (domain, issue_id) in registry.issues if domain == DOMAIN}
+    assert {i.split("_", 1)[1] for i in ids} == {
+        f"battery_low_{RADIATOR}",
+        f"device_error_{RADIATOR}",
+    }
+
+    cube.devices[0].battery = 0
+    cube.errors[RADIATOR] = False
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert not [1 for (domain, _) in registry.issues if domain == DOMAIN]
+
+
+async def test_the_diagnostics_hide_addresses_and_names(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.diagnostics import async_get_config_entry_diagnostics
+
+    await _setup(hass, config_entry)
+    data = await async_get_config_entry_diagnostics(hass, config_entry)
+    text = str(data)
+    assert "192.168.10.60" not in text
+    assert CUBE_SERIAL not in text and "Bad Thermostat" not in text
+    assert data["devices"][0]["raw_flags"] == "0200"
+
+
 FACTORY_ADDRESS = "192.168.0.222"
 
 
