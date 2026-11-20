@@ -11,6 +11,7 @@ The sockets are blocking, so :func:`discover_cubes` must be run in the executor.
 from __future__ import annotations
 
 import contextlib
+import re
 import socket
 
 DISCOVERY_PORT = 23272
@@ -18,6 +19,14 @@ DISCOVERY_PORT = 23272
 _REQUEST = b"eQ3Max*\x00**********I"
 _RESPONSE_PREFIX = b"eQ3MaxAp"
 _SERIAL_SLICE = slice(8, 18)
+# The datagram is not authenticated: only a serial number of the right shape is taken over (it ends
+# up in discovery flows, titles and the entry's data).
+_SERIAL_FORMAT = re.compile(r"[A-Z0-9]{10}")
+
+
+def is_valid_serial(serial: str) -> bool:
+    """Return True if ``serial`` has the shape of a MAX! serial number (ten capitals or digits)."""
+    return _SERIAL_FORMAT.fullmatch(serial) is not None
 
 
 def hosts_for_serial(cubes: list[dict[str, str]], serial: str) -> list[str]:
@@ -81,7 +90,8 @@ def discover_cubes(timeout: float = 2.0) -> list[dict[str, str]]:
             if not data.startswith(_RESPONSE_PREFIX):
                 continue
             serial = data[_SERIAL_SLICE].decode("ascii", "replace")
-            cubes[addr[0]] = serial
+            if is_valid_serial(serial):
+                cubes[addr[0]] = serial
     finally:
         sock.close()
     return [{"host": host, "serial": serial} for host, serial in cubes.items()]
