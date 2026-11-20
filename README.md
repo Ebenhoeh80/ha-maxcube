@@ -31,6 +31,12 @@ integration that ships with Home Assistant Core.
 - **Sensors**: measured temperature per thermostat and valve opening (%) per
   radiator thermostat.
 - **Binary sensors**: window/door contacts and per-device low-battery warnings.
+- **Cube diagnostics**: the radio **duty cycle** (%) and the number of **free memory slots**,
+  read at every poll. The Cube may only use a limited share of the radio time; at 100 % it
+  sends no radio commands for about an hour, so watch the duty cycle when you change many settings.
+- **Finds the Cube again after an IP change** (DHCP): the Cube is looked up by its serial number
+  and the new address is saved automatically.
+- **Service `maxcube_local.reconnect`** closes the connection to the Cube and reads everything again.
 - The **Cube** appears as a hub device with its firmware version; all devices
   group under it and are assigned to their MAX! room.
 - **Options**: adjustable poll interval (30–600 s).

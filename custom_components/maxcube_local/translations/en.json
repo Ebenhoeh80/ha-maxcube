@@ -31,7 +31,30 @@
     "sensor": {
       "valve_position": {
         "name": "Valve position"
+      },
+      "duty_cycle": {
+        "name": "Radio duty cycle"
+      },
+      "free_memory_slots": {
+        "name": "Free memory slots"
       }
+    }
+  },
+  "services": {
+    "reconnect": {
+      "name": "Reconnect",
+      "description": "Close the connection to the Cube and read everything from it again.",
+      "fields": {
+        "entry_id": {
+          "name": "Cube (config entry)",
+          "description": "Optional: only this Cube. Without it, all configured Cubes are reconnected."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_cube_configured": {
+      "message": "No MAX! Cube is configured."
     }
   }
 }

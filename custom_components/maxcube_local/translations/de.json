@@ -31,7 +31,30 @@
     "sensor": {
       "valve_position": {
         "name": "Ventilstellung"
+      },
+      "duty_cycle": {
+        "name": "Funkauslastung"
+      },
+      "free_memory_slots": {
+        "name": "Freie Speicherplätze"
       }
+    }
+  },
+  "services": {
+    "reconnect": {
+      "name": "Neu verbinden",
+      "description": "Trennt die Verbindung zum Cube und liest alles erneut aus.",
+      "fields": {
+        "entry_id": {
+          "name": "Cube (Konfigurationseintrag)",
+          "description": "Optional: nur dieser Cube. Ohne Angabe werden alle eingerichteten Cubes neu verbunden."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_cube_configured": {
+      "message": "Es ist kein MAX! Cube eingerichtet."
     }
   }
 }

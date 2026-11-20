@@ -19,6 +19,14 @@ _RESPONSE_PREFIX = b"eQ3MaxAp"
 _SERIAL_SLICE = slice(8, 18)
 
 
+def find_host(cubes: list[dict[str, str]], serial: str) -> str | None:
+    """Return the IP address of the discovered Cube with this serial number, if any."""
+    for cube in cubes:
+        if cube.get("serial") == serial:
+            return cube.get("host")
+    return None
+
+
 def discover_cubes(timeout: float = 2.0) -> list[dict[str, str]]:
     """Broadcast a MAX! discovery request and return the cubes that answer.
 

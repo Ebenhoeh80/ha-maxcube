@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-20
+
+### Added
+- **Cube diagnostics.** Two diagnostic sensors on the Cube device: the radio **duty cycle** (%) and
+  the number of **free memory slots**. At a duty cycle of 100 % the Cube sends no radio commands for
+  about an hour, so this is worth watching when many settings are changed.
+- **The Cube is found again after an IP change.** The Cube's serial number is saved; when a poll
+  fails, the integration looks for a Cube with that serial number on the network and saves its new
+  address (at most every five minutes).
+- **Service `maxcube_local.reconnect`** closes the connection to the Cube and reads everything again
+  (optionally for one Cube).
+- Tests for the status values and for finding the Cube by its serial number (new CI workflow).
+
+### Changed
+- Every poll now opens its own short connection to the Cube and closes it again. This keeps the
+  duty cycle and the free memory slots current (the Cube reports them when a connection starts) and
+  leaves the Cube free for other clients between polls.
+
 ## [1.0.0] - 2026-11-20
 
 The integration is stable: entities, configuration data and services stay as they are. From
