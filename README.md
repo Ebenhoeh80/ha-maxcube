@@ -73,7 +73,10 @@ Each period gives the temperature that applies **until** the time shown; the las
 for other days. Add `dry_run: true` to only check the request: nothing is sent to the Cube.
 
 - After writing, the integration reads the programme back from the Cube and reports for each day whether
-  the Cube now shows exactly what you asked for; a day the Cube did not take raises an error.
+  the Cube now shows exactly what you asked for: `confirmed`, or `sent_not_confirmed` when the Cube took the
+  message but still shows the old programme. The Cube updates its copy only after the thermostat has taken the
+  change, which takes about two minutes, so look at the `schedule` attribute a little later. If the old
+  programme is still shown after five minutes, a warning is logged. A day the Cube refuses raises an error.
 - Every day is one radio message. The service refuses to write when the Cube has already used 90 % of
   its radio time (see the *Radio duty cycle* sensor).
 - The programme only matters while a thermostat is in **Auto** mode.

@@ -74,7 +74,11 @@ Tage den Dienst erneut aufrufen. Mit `dry_run: true` wird die Eingabe nur geprü
 gesendet.
 
 - Nach dem Schreiben liest die Integration das Programm vom Cube zurück und meldet je Tag, ob der Cube jetzt
-  genau das zeigt, was du angegeben hast; ein Tag, den der Cube nicht übernommen hat, löst einen Fehler aus.
+  genau das zeigt, was du angegeben hast: `confirmed`, oder `sent_not_confirmed`, wenn der Cube die Nachricht
+  angenommen hat, aber noch das alte Programm zeigt. Der Cube aktualisiert seine Kopie erst, nachdem das
+  Thermostat die Änderung übernommen hat, das dauert etwa zwei Minuten; schau also etwas später ins Attribut
+  `schedule`. Zeigt er nach fünf Minuten immer noch das alte Programm, wird eine Warnung ins Log geschrieben.
+  Ein Tag, den der Cube verweigert, löst einen Fehler aus.
 - Jeder Tag ist eine Funknachricht. Der Dienst schreibt nicht, wenn der Cube schon 90 % seiner Funkzeit
   verbraucht hat (siehe den Sensor *Funkauslastung*).
 - Das Programm wirkt nur, solange ein Thermostat im **Automatik**-Modus ist.
