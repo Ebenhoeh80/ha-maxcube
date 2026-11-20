@@ -824,3 +824,25 @@ async def test_a_programme_write_that_cannot_reach_the_cube_is_a_translated_erro
             blocking=True,
         )
     assert raised.value.translation_key == "cube_unreachable"
+
+
+def _translations(name: str) -> dict:
+    import json
+    from pathlib import Path
+
+    base = Path(__file__).parent.parent / "custom_components" / "maxcube_local"
+    return json.loads((base / name).read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("file", ["strings.json", "translations/en.json", "translations/de.json"])
+async def test_every_preset_of_the_thermostat_has_a_translated_name(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, file: str
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    entry = er.async_get(hass).async_get(entity_id)
+    assert entry is not None and entry.translation_key == "thermostat"
+    presets = hass.states.get(entity_id).attributes["preset_modes"]
+    assert "on" in presets
+    states = _translations(file)["entity"]["climate"]["thermostat"]["state_attributes"]["preset_mode"]["state"]
+    assert set(presets) <= set(states)

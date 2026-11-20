@@ -115,6 +115,8 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     """A MAX! radiator or wall thermostat."""
 
     _attr_name = None
+    # The names of the presets are translated (``entity.climate.thermostat`` in strings.json).
+    _attr_translation_key = "thermostat"
     # The programme is large and rarely changes: keep it out of the history database.
     _unrecorded_attributes = frozenset({"schedule"})
     if _NATIVE_TEMPERATURES:

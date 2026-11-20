@@ -85,6 +85,23 @@
       "device_stale": {
         "name": "No data received"
       }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "name": "Preset",
+            "state": {
+              "none": "None",
+              "boost": "Boost",
+              "comfort": "Comfort",
+              "eco": "Eco",
+              "away": "Away",
+              "on": "On"
+            }
+          }
+        }
+      }
     }
   },
   "services": {
