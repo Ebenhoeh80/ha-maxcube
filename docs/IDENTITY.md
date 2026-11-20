@@ -43,7 +43,8 @@ while it pointed at `192.168.0.222`).
    first message with `data["cube_serial"]`. A different Cube at the saved address (an address taken over, a replaced
    Cube) is treated like an unreachable one: the right Cube is searched by serial number, otherwise setup retries.
    The devices of one Cube are never mixed into another Cube's entry.
-5. **One Cube, one entry.** A second entry whose Cube already belongs to another entry stops at setup with the error
+5. **One Cube, one entry** (the check and the claim of the identity happen without an `await` in between, so two entries
+   starting at the same time cannot both win). A second entry whose Cube already belongs to another entry stops at setup with the error
    "already managed by the entry …" (`ConfigEntryError`); it creates no devices. Adding a Cube by hand while a
    discovery for it is waiting works (`raise_on_progress=False`).
 6. **The connection test closes the connection** (the Cube accepts one client at a time); an unexpected error in
@@ -84,9 +85,11 @@ Entries created by 1.0 to 1.3.2 have `version 1, minor_version 1` and the addres
 - **A replaced Cube** (new serial number at the old address) is refused (`WrongCubeError`, the entry retries): its
   devices must not be mixed into the old Cube's entry. Remove the entry and add the new Cube; there is no automatic
   takeover. (A reconfigure flow with `_abort_if_unique_id_mismatch` comes with 1.4.0.)
-- **UDP broadcast can be spoofed** by another host on the local network. The worst case is a wrong address that is saved
-  and found wrong at the next connection: the serial number in the Cube's first message is compared on every
-  connection (`WrongCubeError`) and the entry looks for the right Cube again. Not worth a second connection per scan.
+- **Spoofing:** the Cube's protocol has no authentication, so a host on the local network that answers the broadcast and
+  accepts the connection can pose as a Cube, and the serial number it claims is not proof. It is the same threat model as
+  before this change (anyone on the network can already talk to the Cube); the serial-number comparison on every
+  connection (`WrongCubeError`) protects against *mix-ups* (two Cubes, an address taken over), not against forgery.
+  A second connection per scan would not change that, so it is not made.
 - **Reauth:** not applicable, the Cube has no authentication. **Reconfigure** (change the address by hand) is part of the
   1.4.0 work and uses `_abort_if_unique_id_mismatch` so that a wrong Cube is refused.
 - **Repair for an unreachable Cube:** not added; the integration cannot fix it, and unavailable entities and the log line

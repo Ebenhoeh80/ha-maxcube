@@ -150,7 +150,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
             )
         # An entry that could not be migrated yet (no serial number saved), or whose identity was
         # overwritten by an older version of the integration, is put right now.
-        if entry.minor_version < CONFIG_ENTRY_MINOR_VERSION or entry.unique_id != cube.serial:
+        if (
+            entry.minor_version < CONFIG_ENTRY_MINOR_VERSION
+            or entry.unique_id != cube.serial
+            or entry.data.get(CONF_CUBE_SERIAL) != cube.serial
+        ):
             _async_apply_identity(hass, entry, cube.serial)
 
     # Register the Cube itself as the hub device, so the thermostats and
@@ -166,11 +170,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
             sw_version=cube.firmware_version,
         )
 
+    # What this setup runs with (the address may have been replaced during the first refresh).
+    applied = (dict(entry.options), entry.data[CONF_HOST])
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Reload when the options or the address changed (the way Home Assistant wants it: the update
     # listener schedules the reload). A change of the identity or title does not need one.
-    applied = (dict(entry.options), entry.data[CONF_HOST])
-
     async def _reload_on_change(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:
         if (dict(entry.options), entry.data[CONF_HOST]) != applied:
             hass.config_entries.async_schedule_reload(entry.entry_id)

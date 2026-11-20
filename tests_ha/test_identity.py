@@ -127,7 +127,17 @@ async def test_a_second_entry_for_the_same_cube_does_not_run(hass: HomeAssistant
     assert second.state is ConfigEntryState.SETUP_ERROR
     assert first.state is ConfigEntryState.LOADED
     assert dr.async_entries_for_config_entry(dr.async_get(hass), second.entry_id) == []
+    assert er.async_entries_for_config_entry(er.async_get(hass), second.entry_id) == []
     assert second.unique_id == HOST  # not taken over; the first entry owns the serial number
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), first.entry_id)
+    assert devices and all(device.config_entries == {first.entry_id} for device in devices)
+
+    # removing the duplicate leaves the devices and entities of the first entry as they are
+    before = _snapshot(hass, first)
+    assert await hass.config_entries.async_remove(second.entry_id)
+    await hass.async_block_till_done()
+    assert _snapshot(hass, first) == before
+    assert first.state is ConfigEntryState.LOADED
 
 
 async def test_a_legacy_entry_is_migrated_even_while_the_cube_is_offline(hass: HomeAssistant) -> None:
@@ -471,3 +481,25 @@ async def test_the_scan_does_not_touch_a_cube_that_is_set_up_at_the_same_address
         assert await async_setup_component(hass, DOMAIN, {})
         await hass.async_block_till_done()
     assert [call.args[0] for call in reachable.call_args_list] == ["192.168.10.77"]
+
+
+async def test_an_entry_without_the_serial_in_its_data_gets_it(hass: HomeAssistant, cube: FakeCube) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CUBE_SERIAL,
+        title=TITLE,
+        data={CONF_HOST: HOST, CONF_PORT: 62910},
+        version=1,
+        minor_version=2,
+    )
+    await _setup(hass, entry)
+    assert entry.data[CONF_CUBE_SERIAL] == CUBE_SERIAL
+
+
+async def test_dhcp_does_not_contact_a_cube_at_an_address_that_is_set_up(hass: HomeAssistant, cube: FakeCube) -> None:
+    await _setup(hass, _modern())
+    connect = MagicMock(return_value=CUBE_SERIAL)
+    with patch(CONNECT, connect):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_DHCP}, data=_dhcp(HOST))
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
+    connect.assert_not_called()

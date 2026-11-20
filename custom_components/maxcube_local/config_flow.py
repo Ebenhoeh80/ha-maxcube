@@ -160,6 +160,9 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
         finds the first Cube and follows a Cube whose address changed.
         """
         host = discovery_info.ip
+        for entry in self._async_current_entries(include_ignore=False):
+            if entry.data.get(CONF_HOST) == host and entry.data.get(CONF_CUBE_SERIAL):
+                return self.async_abort(reason="already_configured")  # known address: no need to disturb the Cube
         try:
             serial = await self.hass.async_add_executor_job(_try_connect, host, DEFAULT_PORT)
         except Exception:  # noqa: BLE001 - another eQ-3 device, or the Cube is busy
