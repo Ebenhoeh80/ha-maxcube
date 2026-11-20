@@ -874,10 +874,10 @@ class MaxCubeScheduleCard extends HTMLElement {
 
     this.innerHTML = `
       <style>
-        :host { display: block; }
-        :host(.size-small) { font-size: 0.85em; }
-        :host(.size-medium) { font-size: 1em; }
-        :host(.size-large) { font-size: 1.15em; }
+        maxcube-schedule-card { display: block; }
+        maxcube-schedule-card.size-small { font-size: 0.85em; }
+        maxcube-schedule-card.size-medium { font-size: 1em; }
+        maxcube-schedule-card.size-large { font-size: 1.15em; }
         .pad { padding: 12px; }
         ha-card { overflow: hidden; }
         .tabs { display: flex; overflow-x: auto; gap: 2px; padding: 4px 4px 0; }
@@ -890,31 +890,31 @@ class MaxCubeScheduleCard extends HTMLElement {
           background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff);
           font-weight: 600;
         }
-        :host(.size-small) .wrap { padding: 4px 8px 8px; }
-        :host(.size-small) .track { height: 20px; }
-        :host(.size-small) .dl { width: 20px; flex: 0 0 20px; font-size: 9px; }
-        :host(.size-small) .zt { font-size: 8px; }
-        :host(.size-small) .legend span { font-size: 8px; }
-        :host(.size-small) .scale { height: 6px; }
-        :host(.size-small) .track { height: 20px; }
-        :host(.size-small) .tin { width: 60px; font-size: 11px; }
-        :host(.size-small) .tin.time { width: 70px; }
-        :host(.size-medium) .wrap { padding: 8px 12px 12px; }
-        :host(.size-medium) .track { height: 26px; }
-        :host(.size-medium) .dl { width: 26px; flex: 0 0 26px; font-size: 11px; }
-        :host(.size-medium) .zt { font-size: 10px; }
-        :host(.size-medium) .legend span { font-size: 9px; }
-        :host(.size-medium) .scale { height: 8px; }
-        :host(.size-medium) .track { height: 26px; }
-        :host(.size-large) .wrap { padding: 12px 16px 16px; }
-        :host(.size-large) .track { height: 32px; }
-        :host(.size-large) .dl { width: 32px; flex: 0 0 32px; font-size: 13px; }
-        :host(.size-large) .zt { font-size: 12px; }
-        :host(.size-large) .legend span { font-size: 10px; }
-        :host(.size-large) .scale { height: 10px; }
-        :host(.size-large) .track { height: 32px; }
-        :host(.size-large) .tin { width: 88px; font-size: 14px; }
-        :host(.size-large) .tin.time { width: 96px; }
+        maxcube-schedule-card.size-small .wrap { padding: 4px 8px 8px; }
+        maxcube-schedule-card.size-small .track { height: 20px; }
+        maxcube-schedule-card.size-small .dl { width: 20px; flex: 0 0 20px; font-size: 9px; }
+        maxcube-schedule-card.size-small .zt { font-size: 8px; }
+        maxcube-schedule-card.size-small .legend span { font-size: 8px; }
+        maxcube-schedule-card.size-small .scale { height: 6px; }
+        maxcube-schedule-card.size-small .track { height: 20px; }
+        maxcube-schedule-card.size-small .tin { width: 60px; font-size: 11px; }
+        maxcube-schedule-card.size-small .tin.time { width: 70px; }
+        maxcube-schedule-card.size-medium .wrap { padding: 8px 12px 12px; }
+        maxcube-schedule-card.size-medium .track { height: 26px; }
+        maxcube-schedule-card.size-medium .dl { width: 26px; flex: 0 0 26px; font-size: 11px; }
+        maxcube-schedule-card.size-medium .zt { font-size: 10px; }
+        maxcube-schedule-card.size-medium .legend span { font-size: 9px; }
+        maxcube-schedule-card.size-medium .scale { height: 8px; }
+        maxcube-schedule-card.size-medium .track { height: 26px; }
+        maxcube-schedule-card.size-large .wrap { padding: 12px 16px 16px; }
+        maxcube-schedule-card.size-large .track { height: 32px; }
+        maxcube-schedule-card.size-large .dl { width: 32px; flex: 0 0 32px; font-size: 13px; }
+        maxcube-schedule-card.size-large .zt { font-size: 12px; }
+        maxcube-schedule-card.size-large .legend span { font-size: 10px; }
+        maxcube-schedule-card.size-large .scale { height: 10px; }
+        maxcube-schedule-card.size-large .track { height: 32px; }
+        maxcube-schedule-card.size-large .tin { width: 88px; font-size: 14px; }
+        maxcube-schedule-card.size-large .tin.time { width: 96px; }
         .wrap { padding: 8px 12px 12px; }
         .grid { width: 100%; }
         .ruler, .day { display: flex; align-items: center; }
