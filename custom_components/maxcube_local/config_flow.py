@@ -69,7 +69,8 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 serial = await self.hass.async_add_executor_job(_try_connect, host, port)
             except OSError:
-                pass
+                # Not reachable: the serial number stays None and the check below reports it.
+                _LOGGER.debug("No answer from the MAX! Cube at %s:%s", host, port)
             except Exception:  # noqa: BLE001 - shown to the user as an unknown error
                 _LOGGER.exception("Unexpected error while connecting to the MAX! Cube")
                 errors["base"] = "unknown"
