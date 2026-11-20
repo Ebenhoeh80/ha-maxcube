@@ -343,13 +343,11 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
                 await self._set_target_temperature(eco)
 
     async def _set_target_temperature(self, temperature: float) -> None:
-        await self.hass.async_add_executor_job(
+        await self.coordinator.async_cube_call(
             self.coordinator.cube.set_target_temperature, self._device, temperature
         )
         await self.coordinator.async_request_refresh()
 
     async def _set_mode(self, mode: int) -> None:
-        await self.hass.async_add_executor_job(
-            self.coordinator.cube.set_mode, self._device, mode
-        )
+        await self.coordinator.async_cube_call(self.coordinator.cube.set_mode, self._device, mode)
         await self.coordinator.async_request_refresh()

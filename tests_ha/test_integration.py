@@ -19,6 +19,7 @@ from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 from .conftest import CUBE_SERIAL, DAY, HOST, RADIATOR, WALL, WINDOW, FakeCube
 
 NEW_HOST = "192.168.10.99"
+NO_CUBES_FOUND = ("custom_components.maxcube_local.coordinator.discover_cubes", [])
 
 
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -667,13 +668,15 @@ async def test_a_refused_connection_is_tried_once_more_before_the_cube_counts_as
     coordinator = config_entry.runtime_data
     cube.fail_with = ConnectionRefusedError
 
-    cube.fail_updates = 1
-    await coordinator.async_refresh()
-    assert coordinator.last_update_success is True
+    with patch("custom_components.maxcube_local.coordinator.POLL_RETRY_DELAY", 0):
+        cube.fail_updates = 1
+        await coordinator.async_refresh()
+        assert coordinator.last_update_success is True
 
-    cube.fail_updates = 2
-    await coordinator.async_refresh()
-    assert coordinator.last_update_success is False
+        cube.fail_updates = 2
+        with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+            await coordinator.async_refresh()
+        assert coordinator.last_update_success is False
 
 
 async def test_a_slow_failure_is_not_repeated(
@@ -685,6 +688,52 @@ async def test_a_slow_failure_is_not_repeated(
     before = cube.updates
     cube.fail_with = TimeoutError
     cube.fail_updates = 1
-    await coordinator.async_refresh()
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        await coordinator.async_refresh()
     assert coordinator.last_update_success is False
+    assert cube.updates == before + 1
+
+
+async def test_the_polls_are_counted_and_timed_in_the_diagnostics(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.diagnostics import async_get_config_entry_diagnostics
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.io_delay = 0.02
+    await coordinator.async_refresh()
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        cube.fail_updates = 1
+        await coordinator.async_refresh()
+    data = await async_get_config_entry_diagnostics(hass, config_entry)
+    assert data["polls"]["failed"] == 1
+    assert data["polls"]["total"] >= 3
+    assert data["polls"]["last_duration_ms"] >= 20
+
+
+async def test_two_quick_commands_are_read_back_within_a_few_seconds(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
+) -> None:
+    """The default merge time of 10 s would leave the second change unseen for that long."""
+    from datetime import timedelta
+
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+
+    async def change(temperature: float) -> None:
+        await hass.services.async_call(
+            "climate", "set_temperature", {"entity_id": entity_id, "temperature": temperature}, blocking=True
+        )
+        await hass.async_block_till_done()
+
+    await change(19.0)  # read back at once
+    before = cube.updates
+    await change(20.0)  # inside the cooldown: read back after it
+    assert cube.updates == before
+    freezer.tick(timedelta(seconds=3))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
     assert cube.updates == before + 1
