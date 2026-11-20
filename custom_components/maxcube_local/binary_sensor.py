@@ -19,6 +19,10 @@ from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity
 
 
+# read-only: the coordinator does the polling
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MaxCubeConfigEntry,

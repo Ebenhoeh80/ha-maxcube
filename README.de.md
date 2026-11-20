@@ -140,6 +140,73 @@ angleichen.
 
 ---
 
+## ⚙️ Konfiguration
+
+| Einstellung | Wo | Bedeutung |
+| :--- | :--- | :--- |
+| IP-Adresse | Einrichtung oder **Neu konfigurieren** | Adresse des Cubes. Vorbelegt, wenn der Cube auf die Suche antwortet. |
+| Port | Einrichtung oder **Neu konfigurieren** | Standard `62910`. |
+| Abfrageintervall | **Konfigurieren** (Optionen), 30–600 s | Wie oft der Cube gelesen wird. Standard 60 s. Lesen ist günstig; Funkzeit verbrauchen vor allem Schreibzugriffe. |
+
+**Neue Adresse für den Cube?** Die Integration sucht ihn über seine Seriennummer und speichert die neue Adresse
+selbst. Klappt das nicht, nutze **⋮ → Neu konfigurieren** am Integrationseintrag und gib die neue IP ein; Geräte,
+Namen und Verlauf bleiben erhalten.
+
+---
+
+## 🖥️ Unterstützte Geräte
+
+| Gerät | Unterstützt |
+| :--- | :--- |
+| MAX! Cube LAN-Gateway | ja (Hub-Gerät, Firmware, Funkauslastung, freie Speicherplätze) |
+| Heizkörperthermostat / Thermostat+ | ja (Klima, Temperatur, Ventilstellung, Batterie, Wochenprogramm lesen und schreiben) |
+| Wandthermostat | ja (Klima, Temperatur, Batterie; das Programm wird angezeigt, nicht geschrieben) |
+| Fenster-/Türkontakt | ja (offen/geschlossen, Batterie) |
+| Eco-Taster | noch nicht |
+
+## 🔧 Unterstützte Funktionen
+
+Lesen: Soll- und Isttemperatur, Modus, Voreinstellungen, Ventilstellung, Fensterzustand, Batterie, Wochenprogramm,
+Funkauslastung, freie Speicherplätze. Schreiben: Solltemperatur, HVAC-Modus, Voreinstellung, Wochenprogramm
+(Heizkörperthermostate). Nicht unterstützt: Geräte koppeln, Komfort-/Eco-/Fenster-Temperaturen ändern, Urlaubsmodus.
+
+## 🔄 Datenaktualisierung
+
+Die Integration fragt den Cube (lokal, ohne Cloud) standardmäßig alle 60 s ab. Jede Abfrage öffnet kurz eine
+Verbindung und schließt sie wieder, damit andere Programme den Cube dazwischen nutzen können. Änderungen aus
+Home Assistant werden sofort gesendet und bei der nächsten Abfrage zurückgelesen.
+
+## 💡 Anwendungsbeispiele
+
+- **Kinderzimmer an Schultagen früher heizen:** `maxcube_local.set_schedule` (siehe oben) aus einer Automation
+  oder einem Skript aufrufen.
+- **Vor einem kalten Raum warnen:** Automation auf `climate.<raum>` mit Template-Bedingung, die
+  `current_temperature` mit `temperature` vergleicht.
+- **Beim Verlassen sparen:** Voreinstellung *Abwesend* mit `climate.set_preset_mode` setzen.
+
+## 🩺 Fehlerbehebung
+
+| Problem | Was prüfen |
+| :--- | :--- |
+| *Verbindung fehlgeschlagen* bei der Einrichtung | MAX!-App schließen und alten `maxcube:`-YAML-Block entfernen: Der Cube erlaubt nur einen Client. IP und Port prüfen. |
+| Entitäten werden „nicht verfügbar“ | Der Cube ist nicht erreichbar. Sensor **Konnektivität** ansehen; dem Cube eine feste Adresse geben oder die automatische Suche nutzen. |
+| Ein Thermostat zeigt keine Temperatur | Heizkörperthermostate melden die Isttemperatur nur im Auto-/Manuell-Modus und erst nach dem ersten Funkkontakt. |
+| Programmänderung nicht sichtbar | Der Cube zeigt sie nach etwa zwei Minuten; Attribut `schedule` später erneut ansehen. |
+| Schreiben abgelehnt (Funkauslastung) | Der Cube hat 90 % seiner Funkzeit genutzt. Warten; bei 100 % sendet er etwa eine Stunde nichts. |
+
+## 🗑️ Entfernen
+
+**Einstellungen → Geräte & Dienste → eQ-3 MAX! Cube → ⋮ → Löschen.** Der Cube und seine Geräte verschwinden aus Home
+Assistant; am Cube selbst ändert sich nichts. Danach bei Bedarf die Integration in HACS entfernen.
+
+## ⚠️ Bekannte Einschränkungen
+
+- Der Cube erlaubt nur einen Client gleichzeitig.
+- Wandthermostate lassen sich hier nicht programmieren; Koppeln oder Löschen von Geräten braucht die MAX!-Software.
+- Home Assistant speichert das Programm eines Thermostats nicht, es wird vom Cube gelesen.
+
+---
+
 ## 🙏 Credits
 
 Diese Integration basiert auf der Bibliothek

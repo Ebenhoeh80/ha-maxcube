@@ -7,6 +7,22 @@
         "data": {
           "host": "IP address",
           "port": "Port"
+        },
+        "data_description": {
+          "host": "IP address of the Cube LAN gateway, for example 192.168.1.50. A fixed address (DHCP reservation) is best.",
+          "port": "TCP port of the Cube. Leave it at 62910 unless you know that yours differs."
+        }
+      },
+      "reconfigure": {
+        "title": "Change the Cube's address",
+        "description": "Enter the new IP address of your MAX! Cube. Nothing else is changed: devices, names and history stay.",
+        "data": {
+          "host": "IP address",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "IP address of the Cube LAN gateway, for example 192.168.1.50. A fixed address (DHCP reservation) is best.",
+          "port": "TCP port of the Cube. Leave it at 62910 unless you know that yours differs."
         }
       }
     },
@@ -14,7 +30,8 @@
       "cannot_connect": "Failed to connect. Check the IP address and make sure no other app is connected to the Cube."
     },
     "abort": {
-      "already_configured": "This MAX! Cube is already configured."
+      "already_configured": "This MAX! Cube is already configured.",
+      "reconfigure_successful": "The address was changed."
     }
   },
   "options": {
@@ -23,6 +40,9 @@
         "title": "MAX! Cube options",
         "data": {
           "scan_interval": "Poll interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often the Cube is read, in seconds (30 to 600)."
         }
       }
     }

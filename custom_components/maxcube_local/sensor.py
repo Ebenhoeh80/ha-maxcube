@@ -20,6 +20,10 @@ from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity
 
 
+# read-only: the coordinator does the polling
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MaxCubeConfigEntry,
@@ -36,13 +40,9 @@ async def async_setup_entry(
             entities.append(MaxCubeTemperature(coordinator, device))
     if cube.serial:
         if cube.duty_cycle is not None:
-            entities.append(
-                MaxCubeStatusSensor(coordinator, "duty_cycle", PERCENTAGE, "mdi:radio-tower")
-            )
+            entities.append(MaxCubeStatusSensor(coordinator, "duty_cycle", PERCENTAGE))
         if cube.free_memory_slots is not None:
-            entities.append(
-                MaxCubeStatusSensor(coordinator, "free_memory_slots", None, "mdi:memory")
-            )
+            entities.append(MaxCubeStatusSensor(coordinator, "free_memory_slots", None))
     async_add_entities(entities)
 
 
@@ -52,7 +52,6 @@ class MaxCubeValve(MaxCubeEntity, SensorEntity):
     _attr_translation_key = "valve_position"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:radiator"
 
     def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
         """Initialize the valve-position sensor."""
@@ -102,14 +101,12 @@ class MaxCubeStatusSensor(CoordinatorEntity[MaxCubeCoordinator], SensorEntity):
         coordinator: MaxCubeCoordinator,
         key: str,
         unit: str | None,
-        icon: str,
     ) -> None:
         """Initialize the status sensor on the Cube's hub device."""
         super().__init__(coordinator)
         self._key = key
         self._attr_translation_key = key
         self._attr_native_unit_of_measurement = unit
-        self._attr_icon = icon
         serial = coordinator.cube.serial
         self._attr_unique_id = f"{serial}_{key}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, serial)})

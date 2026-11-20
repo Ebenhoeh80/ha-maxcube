@@ -310,3 +310,85 @@ async def test_the_diagnostics_hide_addresses_and_names(
     assert "192.168.10.60" not in text
     assert CUBE_SERIAL not in text and "Bad Thermostat" not in text
     assert data["devices"][0]["raw_flags"] == "0200"
+
+
+async def test_reconfigure_changes_the_address_and_keeps_the_entry(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await config_entry.start_reconfigure_flow(hass)
+    assert result["step_id"] == "reconfigure"
+    with patch("custom_components.maxcube_local.config_flow._try_connect"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == "abort" and result["reason"] == "reconfigure_successful"
+    assert config_entry.data[CONF_HOST] == NEW_HOST
+    assert config_entry.unique_id == NEW_HOST
+
+
+async def test_reconfigure_shows_an_error_when_the_new_address_does_not_answer(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await config_entry.start_reconfigure_flow(hass)
+    with patch("custom_components.maxcube_local.config_flow._try_connect", side_effect=OSError):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_the_user_flow_creates_an_entry(hass: HomeAssistant, cube: FakeCube) -> None:
+    with (
+        patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]),
+        patch("custom_components.maxcube_local.config_flow._try_connect"),
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        assert result["step_id"] == "user"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: "192.168.10.70", "port": 62910}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_HOST] == "192.168.10.70"
+
+
+async def test_the_user_flow_reports_an_unreachable_cube_and_prefills_a_found_one(
+    hass: HomeAssistant, cube: FakeCube
+) -> None:
+    found = [{"host": "192.168.10.71", "serial": "KEQ9999999"}]
+    with patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=found):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    assert result["step_id"] == "user"
+    with patch("custom_components.maxcube_local.config_flow._try_connect", side_effect=OSError):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: "192.168.10.71", "port": 62910}
+        )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_the_user_flow_refuses_a_cube_that_is_already_configured(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    config_entry.add_to_hass(hass)
+    with patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: config_entry.data[CONF_HOST], "port": 62910}
+        )
+    assert result["type"] == "abort" and result["reason"] == "already_configured"
+
+
+async def test_the_poll_interval_can_be_changed_in_the_options(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    assert result["step_id"] == "init"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 120}
+    )
+    assert result["type"] == "create_entry"
+    assert config_entry.options["scan_interval"] == 120

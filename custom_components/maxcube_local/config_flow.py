@@ -79,6 +79,40 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the address of an existing Cube without removing it."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host, port = user_input[CONF_HOST], user_input[CONF_PORT]
+            if any(
+                other.entry_id != entry.entry_id and other.data.get(CONF_HOST) == host
+                for other in self._async_current_entries()
+            ):
+                return self.async_abort(reason="already_configured")
+            try:
+                await self.hass.async_add_executor_job(_try_connect, host, port)
+            except OSError:
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    unique_id=host,
+                    title=f"MAX! Cube ({host})",
+                    data_updates={CONF_HOST: host, CONF_PORT: port},
+                )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=entry.data[CONF_HOST]): str,
+                vol.Required(CONF_PORT, default=entry.data[CONF_PORT]): int,
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure", data_schema=schema, errors=errors
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(

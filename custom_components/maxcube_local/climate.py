@@ -71,6 +71,10 @@ MIN_TEMPERATURE = 5.0
 MAX_TEMPERATURE = 30.0
 
 
+# the Cube accepts one command at a time: the coordinator does the polling
+PARALLEL_UPDATES = 1
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MaxCubeConfigEntry,

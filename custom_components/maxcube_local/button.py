@@ -41,6 +41,10 @@ _SERIAL_LENGTH = 10
 _SEND_TIMEOUT = 3.0
 
 
+# a press talks to the Cube: the coordinator does the polling
+PARALLEL_UPDATES = 1
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MaxCubeConfigEntry,
@@ -56,7 +60,6 @@ class MaxCubeRebootButton(ButtonEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "reboot"
-    _attr_icon = "mdi:restart"
     # A press restarts the Cube, so it must be switched on deliberately.
     _attr_entity_registry_enabled_default = False
 
