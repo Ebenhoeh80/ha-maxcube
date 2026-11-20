@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
@@ -146,14 +146,12 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 results[day] = "sent_not_confirmed" if sent[day] else "failed"
         pending = {day: days[day] for day, result in results.items() if result == "sent_not_confirmed"}
         if pending:
+
+            async def _verify(_now: datetime) -> None:
+                await self._async_verify_schedule(device, pending)
+
             self.config_entry.async_on_unload(
-                async_call_later(
-                    self.hass,
-                    SCHEDULE_VERIFY_DELAY,
-                    lambda _now: self.hass.async_create_task(
-                        self._async_verify_schedule(device, pending)
-                    ),
-                )
+                async_call_later(self.hass, SCHEDULE_VERIFY_DELAY, _verify)
             )
         return results
 
