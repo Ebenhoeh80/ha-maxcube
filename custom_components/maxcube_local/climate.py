@@ -99,6 +99,18 @@ async def async_setup_entry(
     )
 
 
+def _validated_slots(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate the requested periods and turn a problem into a translated service error."""
+    try:
+        return validate_periods(periods)
+    except ScheduleError as err:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key=f"schedule_{err.key}",
+            translation_placeholders={"detail": err.detail},
+        ) from err
+
+
 class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     """A MAX! radiator or wall thermostat."""
 
@@ -196,6 +208,16 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         """Return the weekly heating programme (service ``get_schedule``)."""
         return self._schedule
 
+    def _ensure_radio_time_left(self) -> None:
+        """Refuse to write while the Cube has used (almost) all of its radio time."""
+        duty = getattr(self.coordinator.cube, "duty_cycle", None)
+        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="schedule_duty_cycle_high",
+                translation_placeholders={"duty": str(duty)},
+            )
+
     async def async_set_schedule(
         self, days: list[str], periods: list[dict[str, Any]], dry_run: bool = False
     ) -> dict[str, Any]:
@@ -204,24 +226,11 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="schedule_radiator_only"
             )
-        try:
-            slots = validate_periods(periods)
-        except ScheduleError as err:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key=f"schedule_{err.key}",
-                translation_placeholders={"detail": err.detail},
-            ) from err
+        slots = _validated_slots(periods)
         days = list(dict.fromkeys(days))  # each day once, in the order given
         if dry_run:
             return {"dry_run": True, "would_write": dict.fromkeys(days, slots)}
-        duty = getattr(self.coordinator.cube, "duty_cycle", None)
-        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="schedule_duty_cycle_high",
-                translation_placeholders={"duty": str(duty)},
-            )
+        self._ensure_radio_time_left()
         results = await self.coordinator.async_write_schedule(
             self._device, dict.fromkeys(days, slots)
         )
