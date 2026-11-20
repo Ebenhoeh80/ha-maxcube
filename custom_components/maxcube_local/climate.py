@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import voluptuous as vol
 from maxcube.device import (
     MAX_DEVICE_MODE_AUTOMATIC,
     MAX_DEVICE_MODE_BOOST,
@@ -30,13 +31,31 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from .const import DOMAIN, MAX_DUTY_CYCLE_FOR_WRITING
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity
-from .schedule import Schedule, scheduled_temperature
+from .schedule import (
+    WEEK_DAYS,
+    Schedule,
+    ScheduleError,
+    scheduled_temperature,
+    validate_periods,
+)
+
+_SET_SCHEDULE_SCHEMA = {
+    vol.Required("days"): vol.All(cv.ensure_list, [vol.In(WEEK_DAYS)], vol.Length(min=1)),
+    vol.Required("periods"): vol.All(
+        cv.ensure_list,
+        [{vol.Required("until"): cv.string, vol.Required("temperature"): vol.Coerce(float)}],
+    ),
+    vol.Optional("dry_run", default=False): cv.boolean,
+}
 
 PRESET_ON = "on"
 
@@ -65,8 +84,15 @@ async def async_setup_entry(
         for device in cube.devices
         if device.is_thermostat() or device.is_wallthermostat()
     )
-    entity_platform.async_get_current_platform().async_register_entity_service(
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
         "get_schedule", None, "async_get_schedule", supports_response=SupportsResponse.ONLY
+    )
+    platform.async_register_entity_service(
+        "set_schedule",
+        _SET_SCHEDULE_SCHEMA,
+        "async_set_schedule",
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 
@@ -166,6 +192,44 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     async def async_get_schedule(self) -> dict[str, Any]:
         """Return the weekly heating programme (service ``get_schedule``)."""
         return self._schedule
+
+    async def async_set_schedule(
+        self, days: list[str], periods: list[dict[str, Any]], dry_run: bool = False
+    ) -> dict[str, Any]:
+        """Write the same daily programme to the given days of a radiator thermostat."""
+        if not self._device.is_thermostat():
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="schedule_radiator_only"
+            )
+        try:
+            slots = validate_periods(periods)
+        except ScheduleError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key=f"schedule_{err.key}",
+                translation_placeholders={"detail": err.detail},
+            ) from err
+        days = list(dict.fromkeys(days))  # each day once, in the order given
+        if dry_run:
+            return {"dry_run": True, "would_write": {day: slots for day in days}}
+        duty = getattr(self.coordinator.cube, "duty_cycle", None)
+        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="schedule_duty_cycle_high",
+                translation_placeholders={"duty": str(duty)},
+            )
+        results = await self.coordinator.async_write_schedule(
+            self._device, {day: slots for day in days}
+        )
+        failed = [day for day, result in results.items() if result == "failed"]
+        if failed:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="schedule_not_written",
+                translation_placeholders={"days": ", ".join(failed)},
+            )
+        return {"result": results}
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

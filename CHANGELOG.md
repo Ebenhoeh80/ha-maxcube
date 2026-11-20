@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-20
+
+### Added
+- **Setting the weekly heating programme.** The service `maxcube_local.set_schedule` writes a daily
+  programme to chosen days of one or more radiator thermostats (periods with the temperature that applies
+  until a time; at most seven per day, 5-minute steps, half degrees, the last period ends at 24:00).
+  `dry_run: true` only checks the request. After writing, the programme is read back from the Cube and
+  checked; a day the Cube did not take raises an error. It refuses to write when the Cube has used 90 %
+  of its radio time.
+- Tests for the validation, for the radio message (identical to the library's for a full day) and for
+  the read-back.
+
+### Changed
+- The radio message is built in the integration instead of with the library's `set_programme`, which
+  skips a write when its own (half-degree-cutting) copy looks equal and pads a short day with one byte
+  instead of two.
+
 ## [1.2.0] - 2026-11-20
 
 ### Added

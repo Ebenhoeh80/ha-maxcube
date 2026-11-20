@@ -14,7 +14,7 @@ import binascii
 
 from maxcube.cube import MaxCube
 
-from .schedule import PROGRAMME_OFFSET, parse_week_program
+from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
 
 _DUTY_CYCLE_FIELD = 5
 _FREE_SLOTS_FIELD = 6
@@ -42,6 +42,18 @@ class MaxCubeWithStatus(MaxCube):
 
     duty_cycle: int | None = None
     free_memory_slots: int | None = None
+
+    def write_day_schedule(self, thermostat, day: str, slots: list[dict]) -> bool:
+        """Send the programme of one day to a radiator thermostat; True if the Cube took it.
+
+        ``slots`` is ``[{"until": "HH:MM", "temp": 21.0}, ...]`` (see ``validate_periods``). The
+        message is built in ``schedule.py`` instead of using the library's ``set_programme``: that
+        one compares with its own lossy copy of the programme (it cuts half degrees) and pads a
+        short day with one byte instead of two, so the message would be too short.
+        """
+        message = encode_set_programme(thermostat.rf_address, thermostat.room_id, day, slots)
+        commander = self._MaxCube__commander  # the library's private connection handler
+        return bool(commander.send_radio_msg(message))
 
     def parse_c_message(self, message: str) -> None:
         """Parse the C message as the library does, and keep the exact weekly programme.

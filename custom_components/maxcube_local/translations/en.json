@@ -54,11 +54,59 @@
     "get_schedule": {
       "name": "Get schedule",
       "description": "Return the weekly heating programme of a thermostat (for each day the setpoints with the time until which each temperature applies)."
+    },
+    "set_schedule": {
+      "name": "Set schedule",
+      "description": "Write the same daily heating programme to the chosen days of a radiator thermostat. Each period gives the temperature that applies until the time shown; the last period must end at 24:00 (at most seven periods, times in steps of 5 minutes, temperatures in half degrees from 4.5 to 30.5). Wall thermostats cannot be programmed here.",
+      "fields": {
+        "days": {
+          "name": "Days",
+          "description": "The days that get this programme (monday to sunday)."
+        },
+        "periods": {
+          "name": "Periods",
+          "description": "A list of periods, each with 'until' (HH:MM) and 'temperature'."
+        },
+        "dry_run": {
+          "name": "Check only",
+          "description": "Only check the request and show what would be written; nothing is sent to the Cube."
+        }
+      }
     }
   },
   "exceptions": {
     "no_cube_configured": {
       "message": "No MAX! Cube is configured."
+    },
+    "schedule_radiator_only": {
+      "message": "Only radiator thermostats can be programmed here."
+    },
+    "schedule_no_periods": {
+      "message": "Give at least one period."
+    },
+    "schedule_too_many_periods": {
+      "message": "At most {detail} periods per day can be written."
+    },
+    "schedule_bad_time": {
+      "message": "{detail} is not a valid time (use HH:MM between 00:05 and 24:00)."
+    },
+    "schedule_time_not_in_steps": {
+      "message": "{detail} is not a multiple of 5 minutes."
+    },
+    "schedule_times_not_rising": {
+      "message": "The times must rise from period to period ({detail} is not later than the one before)."
+    },
+    "schedule_bad_temperature": {
+      "message": "{detail} is not allowed: use half degrees from 4.5 to 30.5."
+    },
+    "schedule_must_end_at_midnight": {
+      "message": "The last period must end at 24:00."
+    },
+    "schedule_duty_cycle_high": {
+      "message": "The Cube has already used {duty} % of its radio time. Try again later."
+    },
+    "schedule_not_written": {
+      "message": "The Cube did not take the programme for: {days}."
     }
   }
 }

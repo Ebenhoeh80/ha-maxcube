@@ -28,7 +28,7 @@ integration that ships with Home Assistant Core.
   - presets Boost, Comfort, Eco, Away,
   - heating action derived from the valve position,
   - comfort/eco setpoints and valve position as extra attributes.
-- **Weekly heating programme** (read-only for now): the programme of each thermostat is shown in the
+- **Weekly heating programme** (read and write): the programme of each thermostat is shown in the
   climate entity's `schedule` attribute (for every day the setpoints with the time until which each
   temperature applies, with exact half degrees), together with `scheduled_temperature`, the temperature
   the programme sets right now. The service `maxcube_local.get_schedule` returns it as a response.
@@ -44,6 +44,41 @@ integration that ships with Home Assistant Core.
 - The **Cube** appears as a hub device with its firmware version; all devices
   group under it and are assigned to their MAX! room.
 - **Options**: adjustable poll interval (30–600 s).
+
+---
+
+## 🗓️ Weekly heating programme
+
+Every radiator thermostat shows its programme in the climate entity's `schedule` attribute and as
+the response of `maxcube_local.get_schedule`. To **change** it, use `maxcube_local.set_schedule`
+on one or more radiator thermostats (wall thermostats cannot be programmed here):
+
+```yaml
+action: maxcube_local.set_schedule
+target:
+  entity_id: climate.kinderzimmer_thermostat_kinderzimmer
+data:
+  days: [monday, tuesday, wednesday, thursday, friday]
+  periods:
+    - {until: "05:00", temperature: 17}
+    - {until: "08:00", temperature: 21}
+    - {until: "17:00", temperature: 18.5}
+    - {until: "23:00", temperature: 21}
+    - {until: "24:00", temperature: 17}
+```
+
+Each period gives the temperature that applies **until** the time shown; the last period must end at
+`24:00`. At most seven periods per day, times in steps of 5 minutes, temperatures in half degrees from
+4.5 ("off") to 30.5 ("on"). The same programme is written to every listed day; call the service again
+for other days. Add `dry_run: true` to only check the request: nothing is sent to the Cube.
+
+- After writing, the integration reads the programme back from the Cube and reports for each day whether
+  the Cube now shows exactly what you asked for; a day the Cube did not take raises an error.
+- Every day is one radio message. The service refuses to write when the Cube has already used 90 % of
+  its radio time (see the *Radio duty cycle* sensor).
+- The programme only matters while a thermostat is in **Auto** mode.
+- The weekly programme is stored per thermostat. The MAX! software sets it per room; to keep a room
+  consistent, select all radiator thermostats of the room as targets.
 
 ---
 
@@ -116,8 +151,7 @@ reference** — it carries no license, and no code from it is included here.
 
 Planned and under consideration — **give a 👍 to what matters to you**, and bring your own ideas:
 
-- ✅ Weekly schedule: view the heating programme (1.2.0)
-- 🔜 Weekly schedule: set the heating programme
+- ✅ Weekly schedule: view (1.2.0) and set (1.3.0) the heating programme
 - 💡 Repair notice when the Cube is unreachable
 - 💡 Diagnostic sensors (comfort/eco/min/max setpoints)
 

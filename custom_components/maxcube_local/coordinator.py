@@ -8,6 +8,7 @@ every poll starts with a fresh ``H:`` line, which carries the duty cycle and the
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import timedelta
@@ -50,6 +51,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         self._host = host
         self._port = port
         self._last_rediscovery = float("-inf")
+        self._write_lock = asyncio.Lock()
         self.cube: MaxCubeWithStatus | None = None
 
     def _connect(self) -> MaxCubeWithStatus:
@@ -99,6 +101,28 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             unique_id=new_host,
         )
         return True
+
+    def _send_days(self, device, days: dict[str, list[dict]]) -> dict[str, bool]:
+        """Send the programme of each day (blocking, runs in the executor)."""
+        return {day: self.cube.write_day_schedule(device, day, slots) for day, slots in days.items()}
+
+    async def async_write_schedule(self, device, days: dict[str, list[dict]]) -> dict[str, str]:
+        """Write the programme of the given days and check, by reading it back, what arrived.
+
+        Returns ``{day: "confirmed" | "sent_not_confirmed" | "failed"}``. ``confirmed`` means the
+        Cube now reports exactly the requested programme.
+        """
+        async with self._write_lock:
+            sent = await self.hass.async_add_executor_job(self._send_days, device, days)
+            await self.async_refresh()
+        stored = getattr(device, "schedule", None) or {}
+        results: dict[str, str] = {}
+        for day, slots in days.items():
+            if stored.get(day) == slots:
+                results[day] = "confirmed"
+            else:
+                results[day] = "sent_not_confirmed" if sent[day] else "failed"
+        return results
 
     async def async_reconnect(self) -> None:
         """Close the connection and read everything from the Cube again."""
