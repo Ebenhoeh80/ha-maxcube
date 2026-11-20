@@ -19,6 +19,25 @@ _RESPONSE_PREFIX = b"eQ3MaxAp"
 _SERIAL_SLICE = slice(8, 18)
 
 
+def hosts_for_serial(cubes: list[dict[str, str]], serial: str) -> list[str]:
+    """Return every address under which a Cube with this serial number answered."""
+    return [cube["host"] for cube in cubes if cube.get("serial") == serial and cube.get("host")]
+
+
+def is_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
+    """Return True if a TCP connection to the Cube's data port can be opened (blocking).
+
+    A Cube that has not yet got a DHCP lease answers the discovery broadcast from its factory
+    address (192.168.0.222) although it cannot be reached there from another network. Such an
+    address must not be saved.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def find_host(cubes: list[dict[str, str]], serial: str) -> str | None:
     """Return the IP address of the discovered Cube with this serial number, if any."""
     for cube in cubes:
