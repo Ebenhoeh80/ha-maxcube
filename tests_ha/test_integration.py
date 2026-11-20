@@ -51,7 +51,9 @@ async def test_setup_creates_the_entities_and_the_hub_device(
         ("binary_sensor", f"{CUBE_SERIAL}_connectivity"),
     ):
         assert _entity_id(hass, domain, unique_id)
-    hub = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, CUBE_SERIAL)})
+    hub = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, CUBE_SERIAL), config_entry.entry_id
+    )
     assert hub is not None
     assert hub.sw_version == "01.13"
 
