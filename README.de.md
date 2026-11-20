@@ -28,7 +28,7 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
   - Presets Boost, Komfort, Eco, Abwesend,
   - Heizaktion aus der Ventilstellung abgeleitet,
   - Komfort-/Eco-Sollwerte und Ventilstellung als Zusatz-Attribute.
-- **Wochen-Heizprogramm** (vorerst nur lesen): Das Programm jedes Thermostats steht im Attribut `schedule`
+- **Wochen-Heizprogramm** (lesen und schreiben): Das Programm jedes Thermostats steht im Attribut `schedule`
   der Klima-Entität (je Tag die Schaltpunkte mit der Uhrzeit, bis zu der die jeweilige Temperatur gilt, mit
   genauen halben Grad), dazu `scheduled_temperature`, die Temperatur, die das Programm gerade vorgibt. Der
   Dienst `maxcube_local.get_schedule` gibt es als Antwort zurück.
@@ -44,6 +44,42 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
 - Der **Cube** erscheint als Hub-Gerät mit Firmware-Version; alle Geräte werden
   darunter gruppiert und ihrem MAX!-Raum zugeordnet.
 - **Optionen**: einstellbares Abfrageintervall (30–600 s).
+
+---
+
+## 🗓️ Wochen-Heizprogramm
+
+Jedes Heizkörperthermostat zeigt sein Programm im Attribut `schedule` der Klima-Entität und als Antwort
+von `maxcube_local.get_schedule`. Zum **Ändern** gibt es `maxcube_local.set_schedule` für ein oder mehrere
+Heizkörperthermostate (Wandthermostate lassen sich hier nicht programmieren):
+
+```yaml
+action: maxcube_local.set_schedule
+target:
+  entity_id: climate.kinderzimmer_thermostat_kinderzimmer
+data:
+  days: [monday, tuesday, wednesday, thursday, friday]
+  periods:
+    - {until: "05:00", temperature: 17}
+    - {until: "08:00", temperature: 21}
+    - {until: "17:00", temperature: 18.5}
+    - {until: "23:00", temperature: 21}
+    - {until: "24:00", temperature: 17}
+```
+
+Jeder Abschnitt gibt die Temperatur an, die **bis** zur genannten Uhrzeit gilt; der letzte Abschnitt muss um
+`24:00` enden. Höchstens sieben Abschnitte pro Tag, Zeiten in 5-Minuten-Schritten, Temperaturen in halben
+Grad von 4,5 („aus“) bis 30,5 („an“). Dasselbe Programm wird auf jeden genannten Tag geschrieben; für andere
+Tage den Dienst erneut aufrufen. Mit `dry_run: true` wird die Eingabe nur geprüft: Es wird nichts an den Cube
+gesendet.
+
+- Nach dem Schreiben liest die Integration das Programm vom Cube zurück und meldet je Tag, ob der Cube jetzt
+  genau das zeigt, was du angegeben hast; ein Tag, den der Cube nicht übernommen hat, löst einen Fehler aus.
+- Jeder Tag ist eine Funknachricht. Der Dienst schreibt nicht, wenn der Cube schon 90 % seiner Funkzeit
+  verbraucht hat (siehe den Sensor *Funkauslastung*).
+- Das Programm wirkt nur, solange ein Thermostat im **Automatik**-Modus ist.
+- Das Wochenprogramm wird je Thermostat gespeichert. Die MAX!-Software setzt es je Raum; damit ein Raum
+  einheitlich bleibt, wähle alle Heizkörperthermostate des Raums als Ziel.
 
 ---
 
@@ -120,8 +156,7 @@ herangezogen — es hat keine Lizenz, und es ist kein Code daraus enthalten.
 
 Geplant und in Prüfung — **gib dem ein 👍, was dir wichtig ist**, und bring eigene Ideen ein:
 
-- ✅ Wochenprogramm: Heizplan anzeigen (1.2.0)
-- 🔜 Wochenprogramm: Heizplan setzen
+- ✅ Wochenprogramm: Heizplan anzeigen (1.2.0) und setzen (1.3.0)
 - 💡 Reparatur-Hinweis, wenn der Cube nicht erreichbar ist
 - 💡 Diagnose-Sensoren (Komfort-/Eco-/Min-/Max-Sollwerte)
 

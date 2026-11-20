@@ -11,3 +11,34 @@ get_schedule:
     entity:
       integration: maxcube_local
       domain: climate
+
+set_schedule:
+  target:
+    entity:
+      integration: maxcube_local
+      domain: climate
+  fields:
+    days:
+      required: true
+      example: '["monday", "tuesday", "wednesday", "thursday", "friday"]'
+      selector:
+        select:
+          multiple: true
+          options:
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday
+    periods:
+      required: true
+      example: '[{"until": "06:00", "temperature": 17}, {"until": "08:00", "temperature": 21}, {"until": "24:00", "temperature": 17}]'
+      selector:
+        object:
+    dry_run:
+      required: false
+      default: false
+      selector:
+        boolean:

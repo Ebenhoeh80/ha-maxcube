@@ -54,11 +54,59 @@
     "get_schedule": {
       "name": "Wochenprogramm abrufen",
       "description": "Gibt das Wochen-Heizprogramm eines Thermostats zurück (je Tag die Schaltpunkte mit der Uhrzeit, bis zu der die jeweilige Temperatur gilt)."
+    },
+    "set_schedule": {
+      "name": "Wochenprogramm setzen",
+      "description": "Schreibt dasselbe Tagesprogramm auf die gewählten Tage eines Heizkörperthermostats. Jeder Abschnitt gibt die Temperatur an, die bis zur genannten Uhrzeit gilt; der letzte Abschnitt muss um 24:00 enden (höchstens sieben Abschnitte, Zeiten in 5-Minuten-Schritten, Temperaturen in halben Grad von 4,5 bis 30,5). Wandthermostate lassen sich hier nicht programmieren.",
+      "fields": {
+        "days": {
+          "name": "Tage",
+          "description": "Die Tage, die dieses Programm bekommen (monday bis sunday)."
+        },
+        "periods": {
+          "name": "Abschnitte",
+          "description": "Eine Liste von Abschnitten, jeweils mit 'until' (HH:MM) und 'temperature'."
+        },
+        "dry_run": {
+          "name": "Nur prüfen",
+          "description": "Prüft nur die Eingabe und zeigt, was geschrieben würde; es wird nichts an den Cube gesendet."
+        }
+      }
     }
   },
   "exceptions": {
     "no_cube_configured": {
       "message": "Es ist kein MAX! Cube eingerichtet."
+    },
+    "schedule_radiator_only": {
+      "message": "Hier lassen sich nur Heizkörperthermostate programmieren."
+    },
+    "schedule_no_periods": {
+      "message": "Gib mindestens einen Abschnitt an."
+    },
+    "schedule_too_many_periods": {
+      "message": "Pro Tag lassen sich höchstens {detail} Abschnitte schreiben."
+    },
+    "schedule_bad_time": {
+      "message": "'{detail}' ist keine gültige Uhrzeit (HH:MM zwischen 00:05 und 24:00)."
+    },
+    "schedule_time_not_in_steps": {
+      "message": "{detail} ist kein Vielfaches von 5 Minuten."
+    },
+    "schedule_times_not_rising": {
+      "message": "Die Zeiten müssen von Abschnitt zu Abschnitt steigen ({detail} ist nicht später als die davor)."
+    },
+    "schedule_bad_temperature": {
+      "message": "{detail} ist nicht erlaubt: halbe Grad von 4,5 bis 30,5 verwenden."
+    },
+    "schedule_must_end_at_midnight": {
+      "message": "Der letzte Abschnitt muss um 24:00 enden."
+    },
+    "schedule_duty_cycle_high": {
+      "message": "Der Cube hat schon {duty} % seiner Funkzeit verbraucht. Versuche es später erneut."
+    },
+    "schedule_not_written": {
+      "message": "Der Cube hat das Programm für diese Tage nicht übernommen: {days}."
     }
   }
 }
