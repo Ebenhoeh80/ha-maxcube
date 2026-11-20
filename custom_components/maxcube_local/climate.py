@@ -29,11 +29,14 @@ from homeassistant.const import (
     PRECISION_TENTHS,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity
+from .schedule import Schedule, scheduled_temperature
 
 PRESET_ON = "on"
 
@@ -62,12 +65,17 @@ async def async_setup_entry(
         for device in cube.devices
         if device.is_thermostat() or device.is_wallthermostat()
     )
+    entity_platform.async_get_current_platform().async_register_entity_service(
+        "get_schedule", None, "async_get_schedule", supports_response=SupportsResponse.ONLY
+    )
 
 
 class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     """A MAX! radiator or wall thermostat."""
 
     _attr_name = None
+    # The programme is large and rarely changes: keep it out of the history database.
+    _unrecorded_attributes = frozenset({"schedule"})
     if _NATIVE_TEMPERATURES:
         _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     else:
@@ -141,10 +149,35 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             return self._target_temperature()
 
     @property
-    def extra_state_attributes(self) -> dict[str, float] | None:
-        """Expose the comfort/eco setpoints and the valve position."""
+    def _schedule(self) -> Schedule:
+        """The weekly programme: the thermostat's own, or (wall thermostat) that of its room."""
+        schedule = getattr(self._device, "schedule", None)
+        if schedule:
+            return schedule
+        cube = self.coordinator.cube
+        room = cube.room_by_id(getattr(self._device, "room_id", None))
+        if room is not None:
+            for other in cube.devices_by_room(room):
+                schedule = getattr(other, "schedule", None)
+                if schedule:
+                    return schedule
+        return {}
+
+    async def async_get_schedule(self) -> dict[str, Any]:
+        """Return the weekly heating programme (service ``get_schedule``)."""
+        return self._schedule
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose the comfort/eco setpoints, the valve position and the weekly programme."""
         device = self._device
-        attrs: dict[str, float] = {}
+        attrs: dict[str, Any] = {}
+        schedule = self._schedule
+        if schedule:
+            attrs["schedule"] = schedule
+            scheduled = scheduled_temperature(schedule, dt_util.now())
+            if scheduled is not None:
+                attrs["scheduled_temperature"] = scheduled
         comfort = getattr(device, "comfort_temperature", None)
         eco = getattr(device, "eco_temperature", None)
         valve = getattr(device, "valve_position", None)

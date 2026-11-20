@@ -2,23 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-from types import ModuleType
-
-BASE = Path(__file__).parents[1] / "custom_components" / "maxcube_local"
-
-
-def _load(name: str) -> ModuleType:
-    """Load one module of the integration without importing the package (it needs Home Assistant)."""
-    spec = importlib.util.spec_from_file_location(f"maxcube_local_{name}", BASE / f"{name}.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-cube = _load("cube")
-discovery = _load("discovery")
+from maxcube_local import cube, discovery
 
 # serial, rf address, firmware, unknown, http id, duty cycle (hex), free slots (hex), date, time ...
 H_MESSAGE = "KEQ0523864,097f2c,0113,00000000,477719c0,32,0f,0d0c09,0900,03,0000,04"

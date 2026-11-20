@@ -50,6 +50,10 @@
           "description": "Optional: nur dieser Cube. Ohne Angabe werden alle eingerichteten Cubes neu verbunden."
         }
       }
+    },
+    "get_schedule": {
+      "name": "Wochenprogramm abrufen",
+      "description": "Gibt das Wochen-Heizprogramm eines Thermostats zurück (je Tag die Schaltpunkte mit der Uhrzeit, bis zu der die jeweilige Temperatur gilt)."
     }
   },
   "exceptions": {

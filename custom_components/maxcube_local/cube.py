@@ -9,7 +9,12 @@ limited share of the time; at 100 % it stops sending radio commands for about an
 
 from __future__ import annotations
 
+import base64
+import binascii
+
 from maxcube.cube import MaxCube
+
+from .schedule import PROGRAMME_OFFSET, parse_week_program
 
 _DUTY_CYCLE_FIELD = 5
 _FREE_SLOTS_FIELD = 6
@@ -33,10 +38,25 @@ def parse_h_status(message: str) -> tuple[int | None, int | None]:
 
 
 class MaxCubeWithStatus(MaxCube):
-    """A ``MaxCube`` that exposes ``duty_cycle`` and ``free_memory_slots``."""
+    """A ``MaxCube`` that exposes ``duty_cycle``, ``free_memory_slots`` and exact schedules."""
 
     duty_cycle: int | None = None
     free_memory_slots: int | None = None
+
+    def parse_c_message(self, message: str) -> None:
+        """Parse the C message as the library does, and keep the exact weekly programme.
+
+        The programme is stored as ``device.schedule`` (see ``schedule.py``) for radiator
+        thermostats; the library's own ``device.programme`` cuts half degrees.
+        """
+        super().parse_c_message(message)
+        try:
+            address, payload = message.split(",")[:2]
+            device = self.device_by_rf(address.upper())
+            if device is not None and device.is_thermostat():
+                device.schedule = parse_week_program(base64.b64decode(payload)[PROGRAMME_OFFSET:])
+        except (ValueError, binascii.Error):
+            pass  # a message we cannot read leaves the previous schedule in place
 
     def parse_h_message(self, message: str) -> None:
         """Parse the H message as the library does, and keep the Cube's status values."""
