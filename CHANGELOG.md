@@ -5,6 +5,38 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-11-20
+
+### Changed
+- **A Cube is identified by its serial number, not by its address.** The entry's unique id and its title are now
+  the serial number (`MAX! Cube JEQ0355273`); before, both contained the address, which changed with every new
+  address and showed a wrong title. Existing entries are migrated at the next start (a title you chose stays);
+  devices, entities, areas and history are not touched. See [`docs/IDENTITY.md`](docs/IDENTITY.md).
+- **Discovery:** Home Assistant now finds a Cube by its DHCP request (hardware address prefix of eQ-3): the first
+  Cube appears under *Discovered*, and a known Cube that got a new address is followed. After startup the integration
+  also scans once for Cubes it does not know or whose address changed.
+- **One Cube, one entry:** a second entry for a Cube that already has one stops with a clear message instead of
+  creating every device twice.
+- **The Cube that answers must be the Cube of the entry:** a different Cube at the saved address is no longer taken
+  over; the right one is looked up by its serial number.
+- The entry reloads (once) when the options or the address change, scheduled by its update listener.
+
+### Fixed
+- The connection test of the setup dialog did not close its connection, so the Cube stayed occupied until it was
+  cleaned up; an unexpected error in the dialog is shown as "unknown".
+- A failed setup because the Cube is off logs one line instead of a full error trace.
+- The broadcast search no longer raises when the machine has no usable network interface.
+
+## [1.3.2] - 2026-11-20
+
+### Fixed
+- **The Cube is found again after it was off or restarted.** A Cube that has no DHCP lease yet
+  answers the discovery broadcast from its factory address `192.168.0.222`. Version 1.3.1 saved that
+  address, although it cannot be reached from the home network, and then stayed on it: the entry
+  was stuck in *retry* and every device was unavailable. Now an address is only saved if the Cube's
+  data port answers there, and the lookup by serial number also runs when Home Assistant starts or
+  the entry is set up again, not only while it is running.
+
 ## [1.3.1] - 2026-11-20
 
 ### Changed
