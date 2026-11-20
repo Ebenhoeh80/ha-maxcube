@@ -10,3 +10,7 @@ venv/
 htmlcov/
 .DS_Store
 Thumbs.db
+
+# downloaded packages must never be committed
+*.whl
+*.tar.gz
