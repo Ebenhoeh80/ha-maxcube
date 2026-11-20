@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import CONF_CUBE_SERIAL, DOMAIN, REDISCOVER_COOLDOWN, SCHEDULE_VERIFY_DELAY
 from .cube import MaxCubeWithStatus
-from .discovery import discover_cubes, find_host
+from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +32,10 @@ type MaxCubeConfigEntry = ConfigEntry[MaxCubeCoordinator]
 # A device counts as stale when nothing was heard from it for this long.  Never
 # shorter than 90 s, so a fast poll interval does not flap the sensor.
 MIN_STALE_AFTER = 90
+
+
+class WrongCubeError(OSError):
+    """A different Cube than the one of this entry answers at the saved address."""
 
 
 class MaxCubeCoordinator(DataUpdateCoordinator[None]):
@@ -67,14 +71,39 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
     def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
         cube = LinkStatusMaxCube(self._host, self._port, now=dt_util.now)
+        try:
+            self._check_identity(cube)
+        except WrongCubeError:
+            cube.disconnect()
+            raise
         # From now on every poll opens its own short connection (see the module docstring).
         cube.use_persistent_connection = False
         cube.disconnect()
         return cube
 
+    def _check_identity(self, cube: MaxCubeWithStatus) -> None:
+        """Make sure the Cube that answers is the one this entry belongs to (compared by serial number)."""
+        expected = self.config_entry.data.get(CONF_CUBE_SERIAL)
+        if expected and cube.serial and cube.serial != expected:
+            raise WrongCubeError(
+                f"Another MAX! Cube ({cube.serial}) answers at {self._host}; this entry belongs to {expected}"
+            )
+
     async def _async_setup(self) -> None:
-        """Open the connection once before the first refresh."""
-        self.cube = await self.hass.async_add_executor_job(self._connect)
+        """Open the connection once before the first refresh.
+
+        If the saved address does not answer, the Cube is looked up by its serial number: it may
+        have got a new address while Home Assistant was not running or while the Cube was off.
+        """
+        try:
+            self.cube = await self.hass.async_add_executor_job(self._connect)
+        except (OSError, TimeoutError) as err:
+            self._last_rediscovery = time.monotonic()
+            new_host = await self._async_find_new_host()
+            if new_host is None:
+                raise UpdateFailed(f"Cannot reach the MAX! Cube at {self._host}: {err}") from err
+            self._adopt_host(new_host)
+            self.cube = await self.hass.async_add_executor_job(self._connect)
 
     async def _async_update_data(self) -> None:
         """Refresh all device states from the Cube."""
@@ -83,6 +112,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             return
         try:
             await self.hass.async_add_executor_job(self.cube.update)
+            self._check_identity(self.cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
@@ -95,22 +125,46 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
 
         Returns True if a new address was found and saved; the entry then reloads by itself.
         """
-        serial = self.config_entry.data.get(CONF_CUBE_SERIAL)
         now = time.monotonic()
-        if not serial or now - self._last_rediscovery < REDISCOVER_COOLDOWN:
+        if now - self._last_rediscovery < REDISCOVER_COOLDOWN:
             return False
         self._last_rediscovery = now
-        cubes = await self.hass.async_add_executor_job(discover_cubes)
-        new_host = find_host(cubes, serial)
-        if new_host is None or new_host == self._host:
+        new_host = await self._async_find_new_host()
+        if new_host is None:
             return False
-        _LOGGER.warning("MAX! Cube %s moved from %s to %s", serial, self._host, new_host)
-        self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            data={**self.config_entry.data, CONF_HOST: new_host},
-            unique_id=new_host,
-        )
+        self._adopt_host(new_host)
         return True
+
+    async def _async_find_new_host(self) -> str | None:
+        """Return a new address of this Cube that answers on the data port, if there is one."""
+        serial = self.config_entry.data.get(CONF_CUBE_SERIAL)
+        if not serial:
+            return None
+        cubes = await self.hass.async_add_executor_job(discover_cubes)
+        for host in hosts_for_serial(cubes, serial):
+            if host == self._host:
+                continue
+            if await self.hass.async_add_executor_job(is_reachable, host, self._port):
+                return host
+            _LOGGER.debug("MAX! Cube %s answers from %s, which cannot be reached; ignored", serial, host)
+        return None
+
+    def _adopt_host(self, new_host: str) -> None:
+        """Save a new address of the Cube and use it from now on.
+
+        Only the address changes: the identity of the entry (serial number) and its title stay.
+        The update listener of the entry reloads it with the new address.
+        """
+        _LOGGER.warning(
+            "MAX! Cube %s moved from %s to %s",
+            self.config_entry.data.get(CONF_CUBE_SERIAL),
+            self._host,
+            new_host,
+        )
+        self._host = new_host
+        self.hass.config_entries.async_update_entry(
+            self.config_entry, data={**self.config_entry.data, CONF_HOST: new_host}
+        )
 
     def _send_days(self, device, days: dict[str, list[dict]]) -> dict[str, bool]:
         """Send the programme of each day (blocking, runs in the executor)."""

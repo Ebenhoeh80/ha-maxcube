@@ -8,14 +8,21 @@
           "host": "IP address",
           "port": "Port"
         }
+      },
+      "discovery_confirm": {
+        "title": "Add the MAX! Cube?",
+        "description": "A MAX! Cube with the serial number {serial} was found at {host}. Do you want to add it?"
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect. Check the IP address and make sure no other app is connected to the Cube."
+      "cannot_connect": "Failed to connect. Check the IP address and make sure no other app is connected to the Cube.",
+      "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "This MAX! Cube is already configured."
-    }
+      "already_configured": "This MAX! Cube is already configured.",
+      "cannot_connect": "The device did not answer as a MAX! Cube."
+    },
+    "flow_title": "{name}"
   },
   "options": {
     "step": {
@@ -121,6 +128,9 @@
     },
     "schedule_not_written": {
       "message": "The Cube did not take the programme for: {days}."
+    },
+    "duplicate_cube": {
+      "message": "This MAX! Cube is already managed by the entry \"{title}\". Remove this duplicate entry."
     }
   }
 }
