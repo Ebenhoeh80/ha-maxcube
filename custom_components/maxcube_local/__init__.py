@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
@@ -20,6 +22,8 @@ from .const import (
 )
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .issues import async_setup_issues
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -89,10 +93,52 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
             sw_version=cube.firmware_version,
         )
 
+    _remove_stale_devices(hass, entry)
+    entry.async_on_unload(
+        coordinator.async_add_listener(lambda: _remove_stale_devices(hass, entry))
+    )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     async_setup_issues(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+def _current_identifiers(entry: MaxCubeConfigEntry) -> set[str] | None:
+    """Return the addresses of the Cube and all its devices, or ``None`` if the list is not trustworthy."""
+    cube = entry.runtime_data.cube
+    if cube is None or not cube.devices:
+        # An empty list is more likely a failed read than a Cube without any device.
+        return None
+    current = {device.rf_address for device in cube.devices}
+    if cube.serial:
+        current.add(cube.serial)
+    return current
+
+
+@callback
+def _remove_stale_devices(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:
+    """Delete the registry entries of devices that are no longer paired with the Cube."""
+    current = _current_identifiers(entry)
+    if current is None:
+        return
+    registry = dr.async_get(hass)
+    for device_entry in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        ours = {identifier for domain, identifier in device_entry.identifiers if domain == DOMAIN}
+        if ours and not ours & current:
+            _LOGGER.info("Removing %s: it is no longer paired with the Cube", device_entry.name)
+            registry.async_remove_device(device_entry.id)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: MaxCubeConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the user delete a device in the UI only when the Cube no longer lists it."""
+    current = _current_identifiers(entry)
+    if current is None:
+        return False
+    ours = {identifier for domain, identifier in device_entry.identifiers if domain == DOMAIN}
+    return not ours & current
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> bool:

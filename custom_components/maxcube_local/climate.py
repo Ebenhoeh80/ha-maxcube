@@ -39,7 +39,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, MAX_DUTY_CYCLE_FOR_WRITING
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
-from .entity import MaxCubeEntity
+from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .schedule import (
     WEEK_DAYS,
     Schedule,
@@ -81,13 +81,13 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the climate entities (radiator and wall thermostats)."""
-    coordinator = entry.runtime_data
-    cube = coordinator.cube
-    async_add_entities(
-        MaxCubeClimate(coordinator, device)
-        for device in cube.devices
-        if device.is_thermostat() or device.is_wallthermostat()
-    )
+
+    def _climates(coordinator: MaxCubeCoordinator, device: MaxDevice) -> list[MaxCubeClimate]:
+        if device.is_thermostat() or device.is_wallthermostat():
+            return [MaxCubeClimate(coordinator, device)]
+        return []
+
+    async_add_devices_as_they_appear(entry, async_add_entities, _climates)
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(
         "get_schedule", None, "async_get_schedule", supports_response=SupportsResponse.ONLY

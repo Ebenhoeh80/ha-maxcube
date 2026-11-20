@@ -204,6 +204,7 @@ Assistant; am Cube selbst ändert sich nichts. Danach bei Bedarf die Integration
 - Der Cube erlaubt nur einen Client gleichzeitig.
 - Wandthermostate lassen sich hier nicht programmieren; Koppeln oder Löschen von Geräten braucht die MAX!-Software.
 - Home Assistant speichert das Programm eines Thermostats nicht, es wird vom Cube gelesen.
+- Ein neu gekoppeltes Gerät erscheint bei der nächsten Abfrage. Ein aus dem Cube entferntes Gerät verschwindet nach dem nächsten Neuladen oder Neustart aus Home Assistant.
 
 ---
 

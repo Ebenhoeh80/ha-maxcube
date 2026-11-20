@@ -509,3 +509,58 @@ async def test_a_serial_of_the_wrong_length_is_not_sent(
     with patch("custom_components.maxcube_local.button.socket.socket") as sock:
         await button.async_press()
     assert not sock.called
+
+
+async def test_a_device_paired_later_gets_its_entities_without_a_reload(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from .conftest import _thermostat
+
+    await _setup(hass, config_entry)
+    new = _thermostat()
+    new.rf_address, new.name, new.serial = "0A1B2F", "Kitchen Thermostat", "KEQ4444444"
+    cube.devices.append(new)
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert _entity_id(hass, "climate", "0A1B2F")
+    assert _entity_id(hass, "sensor", "0A1B2F_valve")
+    assert _entity_id(hass, "binary_sensor", "0A1B2F_battery")
+
+
+async def test_a_device_that_left_the_cube_is_removed_but_an_empty_list_is_not_trusted(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    registry = dr.async_get(hass)
+    assert registry.async_get_device_by_identifier((DOMAIN, WINDOW), config_entry.entry_id) is not None
+
+    gone = cube.devices.pop()  # the window contact
+    assert gone.rf_address == WINDOW
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert registry.async_get_device_by_identifier((DOMAIN, WINDOW), config_entry.entry_id) is None
+    assert registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id) is not None
+
+    cube.devices.clear()  # a failed read must not wipe the registry
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id) is not None
+
+
+async def test_the_user_may_delete_only_a_device_the_cube_no_longer_lists(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local import async_remove_config_entry_device
+
+    await _setup(hass, config_entry)
+    registry = dr.async_get(hass)
+    present = registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id)
+    assert not await async_remove_config_entry_device(hass, config_entry, present)
+
+    orphan = registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id, identifiers={(DOMAIN, "FFFFFF")}
+    )
+    assert await async_remove_config_entry_device(hass, config_entry, orphan)
+
+    cube.devices.clear()
+    assert not await async_remove_config_entry_device(hass, config_entry, orphan)

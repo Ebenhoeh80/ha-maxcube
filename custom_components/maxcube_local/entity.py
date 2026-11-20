@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from maxcube.device import MaxDevice
 
+from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEVICE_TYPE_NAMES, DOMAIN, MANUFACTURER
-from .coordinator import MaxCubeCoordinator
+from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 
 
 # Home Assistant 2026.11 links a device to its hub by registry id (``via_device_id``)
@@ -34,6 +38,35 @@ def _hub_link(
         (DOMAIN, cube_serial), coordinator.config_entry.entry_id
     )
     return {"via_device_id": hub.id} if hub is not None else {}
+
+
+@callback
+def async_add_devices_as_they_appear(
+    entry: MaxCubeConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    factory: Callable[[MaxCubeCoordinator, MaxDevice], Iterable[Entity]],
+) -> None:
+    """Create entities for every device now and for each device that appears later.
+
+    A device can be paired with the Cube while Home Assistant runs. It shows up in the next poll
+    and gets its entities then, without reloading the entry.
+    """
+    coordinator = entry.runtime_data
+    known: set[str] = set()
+
+    @callback
+    def _add_new() -> None:
+        cube = coordinator.cube
+        if cube is None:
+            return
+        new = [device for device in cube.devices if device.rf_address not in known]
+        if not new:
+            return
+        known.update(device.rf_address for device in new)
+        async_add_entities([entity for device in new for entity in factory(coordinator, device)])
+
+    _add_new()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new))
 
 
 class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):

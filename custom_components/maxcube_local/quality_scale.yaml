@@ -67,8 +67,8 @@ rules:
   docs-troubleshooting: done
   docs-use-cases: done
   dynamic-devices:
-    status: todo
-    comment: New devices appear after the entry is reloaded, not while it runs.
+    status: done
+    comment: Every poll reconnects and reads the device list again, so a device paired while Home Assistant runs gets its entities at the next poll.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default: done
@@ -78,8 +78,8 @@ rules:
   reconfiguration-flow: done
   repair-issues: done
   stale-devices:
-    status: todo
-    comment: Devices removed from the Cube stay in the device registry until they are deleted by hand.
+    status: done
+    comment: Devices the Cube no longer lists are removed from the registry and the user may delete them in the UI. The library only ever adds devices to its list, so a removed device is noticed after the next reload or restart.
 
   # --- Platinum ---
   async-dependency:

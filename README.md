@@ -199,6 +199,7 @@ Home Assistant; nothing is changed on the Cube itself. Then remove the integrati
 - The Cube accepts only one client at a time.
 - Wall thermostats cannot be programmed here, and pairing or deleting devices needs the MAX! software.
 - Home Assistant does not store a thermostat's programme; it is read from the Cube.
+- A device paired with the Cube appears at the next poll. A device removed from the Cube disappears from Home Assistant after the next reload or restart.
 
 ---
 

@@ -17,7 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
-from .entity import MaxCubeEntity
+from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 
 
 # read-only: the coordinator does the polling
@@ -32,12 +32,17 @@ async def async_setup_entry(
     """Set up valve-position and temperature sensors."""
     coordinator = entry.runtime_data
     cube = coordinator.cube
-    entities: list[SensorEntity] = []
-    for device in cube.devices:
+
+    def _sensors(coordinator: MaxCubeCoordinator, device: MaxDevice) -> list[SensorEntity]:
+        entities: list[SensorEntity] = []
         if device.is_thermostat():
             entities.append(MaxCubeValve(coordinator, device))
         if device.is_thermostat() or device.is_wallthermostat():
             entities.append(MaxCubeTemperature(coordinator, device))
+        return entities
+
+    async_add_devices_as_they_appear(entry, async_add_entities, _sensors)
+    entities: list[SensorEntity] = []
     if cube.serial:
         if cube.duty_cycle is not None:
             entities.append(MaxCubeStatusSensor(coordinator, "duty_cycle", PERCENTAGE))

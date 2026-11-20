@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
-from .entity import MaxCubeEntity
+from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 
 
 # read-only: the coordinator does the polling
@@ -30,25 +30,25 @@ async def async_setup_entry(
 ) -> None:
     """Set up window-contact and low-battery binary sensors."""
     coordinator = entry.runtime_data
-    cube = coordinator.cube
-    entities: list[BinarySensorEntity] = []
-    for device in cube.devices:
+
+    def _binary_sensors(
+        coordinator: MaxCubeCoordinator, device: MaxDevice
+    ) -> list[BinarySensorEntity]:
+        entities: list[BinarySensorEntity] = []
         if device.is_windowshutter():
             entities.append(MaxCubeWindow(coordinator, device))
-        if (
-            device.is_thermostat()
-            or device.is_wallthermostat()
-            or device.is_windowshutter()
-        ):
+        if device.is_thermostat() or device.is_wallthermostat() or device.is_windowshutter():
             entities.append(MaxCubeBattery(coordinator, device))
             # RF link diagnostics: same bit set for every device type.
             entities.append(MaxCubeUninitialized(coordinator, device))
             entities.append(MaxCubeError(coordinator, device))
             entities.append(MaxCubeRadioFault(coordinator, device))
             entities.append(MaxCubeStale(coordinator, device))
+        return entities
+
+    async_add_devices_as_they_appear(entry, async_add_entities, _binary_sensors)
     if coordinator.cube.serial:
-        entities.append(MaxCubeConnectivity(coordinator))
-    async_add_entities(entities)
+        async_add_entities([MaxCubeConnectivity(coordinator)])
 
 
 class MaxCubeWindow(MaxCubeEntity, BinarySensorEntity):
