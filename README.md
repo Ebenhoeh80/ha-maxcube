@@ -135,6 +135,74 @@ continues. Adjust any that don't match exactly under *Settings → Entities*.
 
 ---
 
+## ⚙️ Configuration
+
+| Setting | Where | Meaning |
+| :--- | :--- | :--- |
+| IP address | setup, or **Reconfigure** | Address of the Cube. Pre-filled when the Cube answers the discovery broadcast. |
+| Port | setup, or **Reconfigure** | Default `62910`. |
+| Poll interval | **Configure** (options), 30–600 s | How often the Cube is read. Default 60 s. Reading is cheap; radio time is used up mainly by writing settings. |
+
+**Cube got a new address?** The integration looks for it by its serial number and saves the new address by
+itself. If that does not work, use **⋮ → Reconfigure** on the integration entry and enter the new IP; devices,
+names and history stay.
+
+---
+
+## 🖥️ Supported devices
+
+| Device | Supported |
+| :--- | :--- |
+| MAX! Cube LAN gateway | yes (hub device, firmware, radio duty cycle, free memory slots) |
+| Radiator thermostat / thermostat+ | yes (climate, temperature, valve position, battery, weekly programme read and write) |
+| Wall thermostat | yes (climate, temperature, battery; the programme is shown, not written) |
+| Window / door contact | yes (open/closed, battery) |
+| Eco button | not yet |
+
+## 🔧 Supported functions
+
+Read: target and measured temperature, mode, presets, valve position, window state, battery, weekly programme,
+radio duty cycle, free memory slots. Write: target temperature, HVAC mode, preset, weekly programme (radiator
+thermostats). Not supported: pairing devices, changing comfort/eco/window temperatures, holiday mode.
+
+## 🔄 Data updates
+
+The integration polls the Cube (local, no cloud) every 60 s by default. Every poll opens a short connection
+and closes it again, so other clients can use the Cube in between. Changes you make in Home Assistant are
+sent immediately and read back at the next poll.
+
+## 💡 Use cases
+
+- **Heat the kids' room earlier on school days:** call `maxcube_local.set_schedule` (see above) from an
+  automation or script.
+- **Warn about a cold room:** an automation on `climate.<room>` with a template condition that compares
+  `current_temperature` to `temperature`.
+- **Save heating when away:** set the preset *Away* with `climate.set_preset_mode` when everybody has left.
+
+## 🩺 Troubleshooting
+
+| Problem | What to check |
+| :--- | :--- |
+| *Cannot connect* during setup | Close the MAX! app and remove any old `maxcube:` YAML block: the Cube accepts only one client. Check IP and port. |
+| Entities become unavailable | The Cube is unreachable. Look at the **Connectivity** sensor; give the Cube a fixed address or rely on the automatic rediscovery. |
+| A thermostat shows no temperature | Radiator thermostats report a measured temperature only in Auto/Manual mode, and only after the first radio contact. |
+| Programme change not visible | The Cube shows it after about two minutes; look at the `schedule` attribute again. |
+| Write refused (duty cycle) | The Cube used 90 % of its radio time. Wait; at 100 % it sends nothing for about an hour. |
+
+## 🗑️ Removal
+
+**Settings → Devices & Services → eQ-3 MAX! Cube → ⋮ → Delete.** The Cube and its devices are removed from
+Home Assistant; nothing is changed on the Cube itself. Then remove the integration in HACS if you wish.
+
+## ⚠️ Known limitations
+
+- The Cube accepts only one client at a time.
+- Wall thermostats cannot be programmed here, and pairing or deleting devices needs the MAX! software.
+- Home Assistant does not store a thermostat's programme; it is read from the Cube.
+- A device paired with the Cube appears at the next poll. A device removed from the Cube disappears from Home Assistant after the next reload or restart.
+
+---
+
 ## 🙏 Credits
 
 This integration is built on the

@@ -117,6 +117,27 @@ class ScheduleError(ValueError):
         self.detail = detail
 
 
+def _minutes_of(until: str) -> int:
+    """Return the minutes since midnight of an ``H:MM``/``HH:MM`` time, or raise ``bad_time``."""
+    try:
+        minutes = parse_time(until)
+        hours_part, minutes_part = until.split(":")
+        valid_shape = len(hours_part) in (1, 2) and len(minutes_part) == 2
+    except (ValueError, KeyError):
+        raise ScheduleError("bad_time", until) from None
+    if not valid_shape or not 0 < minutes <= END_OF_DAY_MINUTES:
+        raise ScheduleError("bad_time", until)
+    return minutes
+
+
+def _checked_temperature(value: Any) -> float:
+    """Return the temperature if it is a half degree within the range the thermostat accepts."""
+    temp = float(value)
+    if not MIN_TEMPERATURE <= temp <= MAX_TEMPERATURE or (temp * 2) % 1:
+        raise ScheduleError("bad_temperature", str(temp))
+    return temp
+
+
 def validate_periods(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Check the setpoints of one day and return them as ``[{"until": "HH:MM", "temp": 21.0}]``.
 
@@ -133,21 +154,12 @@ def validate_periods(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
     previous = 0
     for period in periods:
         until = str(period["until"]).strip()
-        try:
-            minutes = parse_time(until)
-            hours_part, minutes_part = until.split(":")
-            valid_shape = len(hours_part) in (1, 2) and len(minutes_part) == 2
-        except (ValueError, KeyError):
-            raise ScheduleError("bad_time", until) from None
-        if not valid_shape or not 0 < minutes <= END_OF_DAY_MINUTES:
-            raise ScheduleError("bad_time", until)
+        minutes = _minutes_of(until)
         if minutes % TIME_STEP_MINUTES:
             raise ScheduleError("time_not_in_steps", until)
         if minutes <= previous:
             raise ScheduleError("times_not_rising", until)
-        temp = float(period["temperature"])
-        if not MIN_TEMPERATURE <= temp <= MAX_TEMPERATURE or (temp * 2) % 1:
-            raise ScheduleError("bad_temperature", str(temp))
+        temp = _checked_temperature(period["temperature"])
         result.append({"until": format_time(minutes), "temp": temp})
         previous = minutes
     if previous != END_OF_DAY_MINUTES:

@@ -1,0 +1,20 @@
+{
+  "entity": {
+    "sensor": {
+      "valve_position": {
+        "default": "mdi:radiator"
+      },
+      "duty_cycle": {
+        "default": "mdi:radio-tower"
+      },
+      "free_memory_slots": {
+        "default": "mdi:memory"
+      }
+    },
+    "button": {
+      "reboot": {
+        "default": "mdi:restart"
+      }
+    }
+  }
+}

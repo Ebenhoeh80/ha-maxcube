@@ -5,14 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-from maxcube.device import (
-    MAX_DEVICE_MODE_AUTOMATIC,
-    MAX_DEVICE_MODE_BOOST,
-    MAX_DEVICE_MODE_MANUAL,
-    MAX_DEVICE_MODE_VACATION,
-    MaxDevice,
-)
-
 from homeassistant.components.climate import (
     PRESET_AWAY,
     PRESET_BOOST,
@@ -36,10 +28,17 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
+from maxcube.device import (
+    MAX_DEVICE_MODE_AUTOMATIC,
+    MAX_DEVICE_MODE_BOOST,
+    MAX_DEVICE_MODE_MANUAL,
+    MAX_DEVICE_MODE_VACATION,
+    MaxDevice,
+)
 
 from .const import DOMAIN, MAX_DUTY_CYCLE_FOR_WRITING
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
-from .entity import MaxCubeEntity
+from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .schedule import (
     WEEK_DAYS,
     Schedule,
@@ -71,19 +70,23 @@ MIN_TEMPERATURE = 5.0
 MAX_TEMPERATURE = 30.0
 
 
+# the Cube accepts one command at a time: the coordinator does the polling
+PARALLEL_UPDATES = 1
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MaxCubeConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the climate entities (radiator and wall thermostats)."""
-    coordinator = entry.runtime_data
-    cube = coordinator.cube
-    async_add_entities(
-        MaxCubeClimate(coordinator, device)
-        for device in cube.devices
-        if device.is_thermostat() or device.is_wallthermostat()
-    )
+
+    def _climates(coordinator: MaxCubeCoordinator, device: MaxDevice) -> list[MaxCubeClimate]:
+        if device.is_thermostat() or device.is_wallthermostat():
+            return [MaxCubeClimate(coordinator, device)]
+        return []
+
+    async_add_devices_as_they_appear(entry, async_add_entities, _climates)
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(
         "get_schedule", None, "async_get_schedule", supports_response=SupportsResponse.ONLY
@@ -94,6 +97,18 @@ async def async_setup_entry(
         "async_set_schedule",
         supports_response=SupportsResponse.OPTIONAL,
     )
+
+
+def _validated_slots(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate the requested periods and turn a problem into a translated service error."""
+    try:
+        return validate_periods(periods)
+    except ScheduleError as err:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key=f"schedule_{err.key}",
+            translation_placeholders={"detail": err.detail},
+        ) from err
 
 
 class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
@@ -193,6 +208,16 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         """Return the weekly heating programme (service ``get_schedule``)."""
         return self._schedule
 
+    def _ensure_radio_time_left(self) -> None:
+        """Refuse to write while the Cube has used (almost) all of its radio time."""
+        duty = getattr(self.coordinator.cube, "duty_cycle", None)
+        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="schedule_duty_cycle_high",
+                translation_placeholders={"duty": str(duty)},
+            )
+
     async def async_set_schedule(
         self, days: list[str], periods: list[dict[str, Any]], dry_run: bool = False
     ) -> dict[str, Any]:
@@ -201,26 +226,13 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="schedule_radiator_only"
             )
-        try:
-            slots = validate_periods(periods)
-        except ScheduleError as err:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key=f"schedule_{err.key}",
-                translation_placeholders={"detail": err.detail},
-            ) from err
+        slots = _validated_slots(periods)
         days = list(dict.fromkeys(days))  # each day once, in the order given
         if dry_run:
-            return {"dry_run": True, "would_write": {day: slots for day in days}}
-        duty = getattr(self.coordinator.cube, "duty_cycle", None)
-        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="schedule_duty_cycle_high",
-                translation_placeholders={"duty": str(duty)},
-            )
+            return {"dry_run": True, "would_write": dict.fromkeys(days, slots)}
+        self._ensure_radio_time_left()
         results = await self.coordinator.async_write_schedule(
-            self._device, {day: slots for day in days}
+            self._device, dict.fromkeys(days, slots)
         )
         failed = [day for day, result in results.items() if result == "failed"]
         if failed:
@@ -331,13 +343,11 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
                 await self._set_target_temperature(eco)
 
     async def _set_target_temperature(self, temperature: float) -> None:
-        await self.hass.async_add_executor_job(
+        await self.coordinator.async_cube_call(
             self.coordinator.cube.set_target_temperature, self._device, temperature
         )
         await self.coordinator.async_request_refresh()
 
     async def _set_mode(self, mode: int) -> None:
-        await self.hass.async_add_executor_job(
-            self.coordinator.cube.set_mode, self._device, mode
-        )
+        await self.coordinator.async_cube_call(self.coordinator.cube.set_mode, self._device, mode)
         await self.coordinator.async_request_refresh()

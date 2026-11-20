@@ -11,21 +11,33 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from typing import Any, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
+from maxcube.device import MaxDevice
 
-from .const import CONF_CUBE_SERIAL, DOMAIN, REDISCOVER_COOLDOWN, SCHEDULE_VERIFY_DELAY
-from .cube import MaxCubeWithStatus
+from .const import (
+    CONF_CUBE_SERIAL,
+    DOMAIN,
+    POLL_RETRY_DELAY,
+    REDISCOVER_COOLDOWN,
+    REQUEST_REFRESH_COOLDOWN,
+    SCHEDULE_VERIFY_DELAY,
+)
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
 
 _LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 type MaxCubeConfigEntry = ConfigEntry[MaxCubeCoordinator]
 
@@ -58,15 +70,31 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=scan_interval),
+            request_refresh_debouncer=Debouncer(
+                hass, _LOGGER, cooldown=REQUEST_REFRESH_COOLDOWN, immediate=True
+            ),
         )
         self._host = host
         self._port = port
         self._last_rediscovery = float("-inf")
         self._write_lock = asyncio.Lock()
+        # The Cube accepts one connection at a time: every call to it goes through this lock.
+        self._io_lock = asyncio.Lock()
+        # What the last polls cost (shown in the diagnostics).
+        self.last_poll_ms: int | None = None
+        self.polls = 0
+        self.failed_polls = 0
         self.scan_interval = scan_interval
         # Three missed polls before a device is considered stale.
         self.stale_after = max(3 * scan_interval, MIN_STALE_AFTER)
-        self.cube: LinkStatusMaxCube | None = None
+        self._cube: LinkStatusMaxCube | None = None
+
+    @property
+    def cube(self) -> LinkStatusMaxCube:
+        """Return the Cube; it exists as soon as the first refresh has succeeded."""
+        if self._cube is None:
+            raise RuntimeError("The MAX! Cube is not connected yet")
+        return self._cube
 
     def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
@@ -81,7 +109,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         cube.disconnect()
         return cube
 
-    def _check_identity(self, cube: MaxCubeWithStatus) -> None:
+    def _check_identity(self, cube: LinkStatusMaxCube) -> None:
         """Make sure the Cube that answers is the one this entry belongs to (compared by serial number)."""
         expected = self.config_entry.data.get(CONF_CUBE_SERIAL)
         if expected and cube.serial and cube.serial != expected:
@@ -96,29 +124,55 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         have got a new address while Home Assistant was not running or while the Cube was off.
         """
         try:
-            self.cube = await self.hass.async_add_executor_job(self._connect)
+            self._cube = await self.hass.async_add_executor_job(self._connect)
         except (OSError, TimeoutError) as err:
             self._last_rediscovery = time.monotonic()
             new_host = await self._async_find_new_host()
             if new_host is None:
                 raise UpdateFailed(f"Cannot reach the MAX! Cube at {self._host}: {err}") from err
             self._adopt_host(new_host)
-            self.cube = await self.hass.async_add_executor_job(self._connect)
+            self._cube = await self.hass.async_add_executor_job(self._connect)
 
     async def _async_update_data(self) -> None:
         """Refresh all device states from the Cube."""
-        if self.cube is None:
-            self.cube = await self.hass.async_add_executor_job(self._connect)
+        if self._cube is None:
+            self._cube = await self.hass.async_add_executor_job(self._connect)
             return
         try:
-            await self.hass.async_add_executor_job(self.cube.update)
-            self._check_identity(self.cube)
+            await self._async_poll(self._cube)
+            self._check_identity(self._cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
                     "The MAX! Cube has a new IP address; reloading with the new address"
                 ) from err
             raise UpdateFailed(f"Error communicating with MAX! Cube: {err}") from err
+
+    async def async_cube_call(self, func: Callable[..., T], *args: Any) -> T:
+        """Run a blocking Cube call in the executor, one call at a time.
+
+        Polls, commands and programme writes would otherwise run in different threads on the same
+        connection object and could overlap; the Cube then refuses one of them.
+        """
+        async with self._io_lock:
+            return await self.hass.async_add_executor_job(func, *args)
+
+    async def _async_poll(self, cube: LinkStatusMaxCube) -> None:
+        """Read the Cube, once more after a refused or dropped connection."""
+        started = time.monotonic()
+        self.polls += 1
+        try:
+            try:
+                await self.async_cube_call(cube.update)
+            except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as err:
+                _LOGGER.debug("The Cube dropped the connection (%s); trying once more", err)
+                await asyncio.sleep(POLL_RETRY_DELAY)
+                await self.async_cube_call(cube.update)
+        except (OSError, TimeoutError):
+            self.failed_polls += 1
+            raise
+        finally:
+            self.last_poll_ms = round((time.monotonic() - started) * 1000)
 
     async def _async_rediscover(self) -> bool:
         """Look for the Cube under a new IP address (it may have got a new DHCP lease).
@@ -166,11 +220,13 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             self.config_entry, data={**self.config_entry.data, CONF_HOST: new_host}
         )
 
-    def _send_days(self, device, days: dict[str, list[dict]]) -> dict[str, bool]:
+    def _send_days(self, device: MaxDevice, days: dict[str, list[dict]]) -> dict[str, bool]:
         """Send the programme of each day (blocking, runs in the executor)."""
         return {day: self.cube.write_day_schedule(device, day, slots) for day, slots in days.items()}
 
-    async def async_write_schedule(self, device, days: dict[str, list[dict]]) -> dict[str, str]:
+    async def async_write_schedule(
+        self, device: MaxDevice, days: dict[str, list[dict]]
+    ) -> dict[str, str]:
         """Write the programme of the given days and check, by reading it back, what arrived.
 
         Returns ``{day: "confirmed" | "sent_not_confirmed" | "failed"}``. ``confirmed`` means the
@@ -180,7 +236,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         and a warning is logged if they still differ.
         """
         async with self._write_lock:
-            sent = await self.hass.async_add_executor_job(self._send_days, device, days)
+            sent = await self.async_cube_call(self._send_days, device, days)
             await self.async_refresh()
         stored = getattr(device, "schedule", None) or {}
         results: dict[str, str] = {}
@@ -191,18 +247,18 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 results[day] = "sent_not_confirmed" if sent[day] else "failed"
         pending = {day: days[day] for day, result in results.items() if result == "sent_not_confirmed"}
         if pending:
+
+            async def _verify(_now: datetime) -> None:
+                await self._async_verify_schedule(device, pending)
+
             self.config_entry.async_on_unload(
-                async_call_later(
-                    self.hass,
-                    SCHEDULE_VERIFY_DELAY,
-                    lambda _now: self.hass.async_create_task(
-                        self._async_verify_schedule(device, pending)
-                    ),
-                )
+                async_call_later(self.hass, SCHEDULE_VERIFY_DELAY, _verify)
             )
         return results
 
-    async def _async_verify_schedule(self, device, days: dict[str, list[dict]]) -> None:
+    async def _async_verify_schedule(
+        self, device: MaxDevice, days: dict[str, list[dict]]
+    ) -> None:
         """Check again, a few minutes after a write, whether the Cube shows the new programme."""
         await self.async_refresh()
         stored = getattr(device, "schedule", None) or {}
@@ -218,8 +274,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
 
     async def async_reconnect(self) -> None:
         """Close the connection and read everything from the Cube again."""
-        if self.cube is not None:
-            await self.hass.async_add_executor_job(self.cube.disconnect)
+        if self._cube is not None:
+            await self.async_cube_call(self._cube.disconnect)
         await self.async_request_refresh()
 
     def device_status(self, rf_address: str) -> DeviceStatus:
@@ -228,8 +284,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         Falls back to an all-unknown, stale status while the Cube object has not
         been built yet, so entities can always read a well-formed value.
         """
-        if self.cube is None:
+        if self._cube is None:
             return DeviceStatus(
                 initialized=None, error=None, link_error=None, last_heard=None, stale=True
             )
-        return self.cube.device_status(rf_address, self.stale_after)
+        return self._cube.device_status(rf_address, self.stale_after)

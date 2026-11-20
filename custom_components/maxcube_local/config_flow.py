@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
-from maxcube.cube import MaxCube
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import AbortFlow
+from maxcube.cube import MaxCube
 
 from .const import (
     CONF_CUBE_SERIAL,
@@ -113,6 +113,41 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the address of an existing Cube without removing it."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host, port = user_input[CONF_HOST], user_input[CONF_PORT]
+            if any(
+                other.entry_id != entry.entry_id and other.data.get(CONF_HOST) == host
+                for other in self._async_current_entries()
+            ):
+                return self.async_abort(reason="already_configured")
+            serial: str | None = None
+            with contextlib.suppress(OSError):
+                serial = await self.hass.async_add_executor_job(_try_connect, host, port)
+            if not serial:
+                errors["base"] = "cannot_connect"
+            else:
+                expected = entry.data.get(CONF_CUBE_SERIAL)
+                if expected and serial != expected:
+                    # Another Cube answers at this address: the identity of the entry must not change.
+                    return self.async_abort(reason="wrong_cube")
+                # Only the address changes; the identity (serial number) and the title stay.
+                return self.async_update_reload_and_abort(
+                    entry, data_updates={CONF_HOST: host, CONF_PORT: port}
+                )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=entry.data[CONF_HOST]): str,
+                vol.Required(CONF_PORT, default=entry.data[CONF_PORT]): int,
+            }
+        )
+        return self.async_show_form(step_id="reconfigure", data_schema=schema, errors=errors)
 
     def _known_entry(self, serial: str, host: str) -> ConfigEntry | None:
         """Return an entry that already manages this Cube but is not yet identified by its serial number.
