@@ -88,7 +88,7 @@
       "message": "Pro Tag lassen sich höchstens {detail} Abschnitte schreiben."
     },
     "schedule_bad_time": {
-      "message": "'{detail}' ist keine gültige Uhrzeit (HH:MM zwischen 00:05 und 24:00)."
+      "message": "{detail} ist keine gültige Uhrzeit (HH:MM zwischen 00:05 und 24:00)."
     },
     "schedule_time_not_in_steps": {
       "message": "{detail} ist kein Vielfaches von 5 Minuten."
