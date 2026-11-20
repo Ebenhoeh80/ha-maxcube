@@ -19,6 +19,7 @@ from .const import (
     SERVICE_RECONNECT,
 )
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
+from .issues import async_setup_issues
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -89,6 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async_setup_issues(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 

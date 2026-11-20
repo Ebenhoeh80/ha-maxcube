@@ -122,5 +122,15 @@
     "schedule_not_written": {
       "message": "Der Cube hat das Programm für diese Tage nicht übernommen: {days}."
     }
+  },
+  "issues": {
+    "battery_low": {
+      "title": "Batterie schwach: {name}",
+      "description": "Das MAX!-Gerät {name} meldet eine schwache Batterie. Bitte bald die Batterien tauschen, sonst antwortet das Gerät nicht mehr und das Heizkörperventil bleibt in der letzten Stellung."
+    },
+    "device_error": {
+      "title": "Gerät meldet einen Fehler: {name}",
+      "description": "Das MAX!-Gerät {name} meldet dem Cube einen Fehler. Bitte prüfen, ob es richtig auf dem Heizkörperventil sitzt, die Batterien in Ordnung sind und es in Funkreichweite des Cubes liegt."
+    }
   }
 }

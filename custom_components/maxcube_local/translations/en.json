@@ -122,5 +122,15 @@
     "schedule_not_written": {
       "message": "The Cube did not take the programme for: {days}."
     }
+  },
+  "issues": {
+    "battery_low": {
+      "title": "Battery low: {name}",
+      "description": "The MAX! device {name} reports a low battery. Replace the batteries soon, otherwise the device stops responding and the radiator valve stays in its last position."
+    },
+    "device_error": {
+      "title": "Device reports an error: {name}",
+      "description": "The MAX! device {name} reports an error to the Cube. Check that it sits properly on the radiator valve, that its batteries are fine and that it is within radio range of the Cube."
+    }
   }
 }
