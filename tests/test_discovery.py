@@ -100,3 +100,24 @@ def test_a_reachable_address_is_recognised_and_the_connection_is_closed() -> Non
 def test_an_address_that_times_out_is_not_reachable() -> None:
     with patch.object(discovery.socket, "create_connection", side_effect=TimeoutError):
         assert not discovery.is_reachable("192.168.0.222", 62910)
+
+
+def test_a_datagram_with_a_malformed_serial_is_ignored() -> None:
+    packets = [
+        b"eQ3MaxApKEQ05238",  # too short
+        b"eQ3MaxApKEQ0523864X",  # the serial is the first ten characters: valid
+        b"eQ3MaxApkeq0523864",  # lower case
+        b"eQ3MaxAp<script>1",  # markup
+        b"eQ3MaxApKEQ05238" + bytes([255, 254]),  # not ASCII
+        b"eQ3MaxAp KEQ052386",  # blank inside
+    ]
+    cubes, _ = run([(p, (f"192.168.1.{i}", 23272)) for i, p in enumerate(packets, start=10)])
+    assert cubes == [{"host": "192.168.1.11", "serial": "KEQ0523864"}]
+
+
+def test_the_serial_shape_is_ten_capitals_or_digits() -> None:
+    assert discovery.is_valid_serial("KEQ0523864")
+    assert discovery.is_valid_serial("0123456789")
+    arabic_digits = "".join(chr(0x663 + i % 2) for i in range(2))
+    for bad in ("", "KEQ052386", "KEQ05238644", "keq0523864", "KEQ052386" + chr(10), "KEQ-523864", "KEQ05238" + arabic_digits):
+        assert not discovery.is_valid_serial(bad), bad

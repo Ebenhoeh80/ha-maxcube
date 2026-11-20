@@ -85,6 +85,23 @@
       "device_stale": {
         "name": "No data received"
       }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "name": "Preset",
+            "state": {
+              "none": "None",
+              "boost": "Boost",
+              "comfort": "Comfort",
+              "eco": "Eco",
+              "away": "Away",
+              "on": "On"
+            }
+          }
+        }
+      }
     }
   },
   "services": {
@@ -157,6 +174,12 @@
     },
     "duplicate_cube": {
       "message": "This MAX! Cube is already managed by the entry \"{title}\". Remove this duplicate entry."
+    },
+    "cube_unreachable": {
+      "message": "The MAX! Cube did not answer ({error}). Check that it is switched on and reachable, and that no other app holds its connection."
+    },
+    "command_rejected": {
+      "message": "The Cube did not accept the command. Its radio time may be used up; try again later."
     }
   },
   "issues": {
@@ -167,6 +190,14 @@
     "device_error": {
       "title": "Device reports an error: {name}",
       "description": "The MAX! device {name} reports an error to the Cube. Check that it sits properly on the radiator valve, that its batteries are fine and that it is within radio range of the Cube."
+    },
+    "cube_unreachable": {
+      "title": "MAX! Cube not reachable",
+      "description": "{title} has not answered for more than six hours. Check that the Cube is switched on, connected to the network and has the address saved here (it is searched by its serial number automatically). The repair hint goes away by itself as soon as the Cube answers again."
+    },
+    "radio_busy": {
+      "title": "MAX! Cube radio time almost used up",
+      "description": "The radio duty cycle of {title} has been at 90 % or more for some time. At 100 % the Cube stops sending commands to the thermostats for about an hour. Avoid many quick changes and programme writes for now. The hint goes away once the value has fallen below 80 %."
     }
   }
 }

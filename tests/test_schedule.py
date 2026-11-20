@@ -260,3 +260,17 @@ def test_the_library_pads_a_short_day_with_one_byte_so_its_message_is_too_short(
     cube.set_programme(thermostat, "monday", short)
     ours = schedule.encode_set_programme("0A1B2C", 1, "monday", short)
     assert len(library.sent[0]) < len(ours)
+
+
+def test_only_plain_hh_mm_times_are_taken() -> None:
+    fullwidth = chr(0xFF10) + chr(0xFF17) + ":00"
+    arabic = chr(0x660) + chr(0x667) + ":00"
+    odd_times = ["+7:00", "-1:05", "07:0", "007:00", "07:000", "07 :00", fullwidth, arabic, "07.00", ""]
+    for odd in odd_times:
+        assert _error([_period(odd, 17), _period("24:00", 17)]) == "bad_time", repr(odd)
+    assert _error([_period(" 7:05" + chr(10), 17), _period("24:00", 17)]) == ""  # surrounding blanks are cut off
+
+
+def test_temperatures_that_are_not_numbers_are_refused() -> None:
+    for odd in (float("nan"), float("inf"), float("-inf")):
+        assert _error([_period("24:00", odd)]) == "bad_temperature", odd

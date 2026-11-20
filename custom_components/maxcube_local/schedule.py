@@ -12,6 +12,7 @@ programme is decoded here to keep the exact temperatures.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -24,6 +25,9 @@ PROGRAMME_OFFSET = 29  # where the weekly programme starts in the decoded C mess
 BLOCK_BYTES = 26
 SLOTS_PER_DAY = 13
 END_OF_DAY_MINUTES = 24 * 60
+# A time as the service takes it: one or two digits for the hour, two for the minutes, ASCII only
+# (``int()`` would also accept signs, spaces and non-ASCII digits).
+_TIME_FORMAT = re.compile(r"[0-9]{1,2}:[0-9]{2}")
 
 Schedule = dict[str, list[dict[str, Any]]]
 
@@ -119,18 +123,15 @@ class ScheduleError(ValueError):
 
 def _minutes_of(until: str) -> int:
     """Return the minutes since midnight of an ``H:MM``/``HH:MM`` time, or raise ``bad_time``."""
-    try:
-        minutes = parse_time(until)
-        hours_part, minutes_part = until.split(":")
-        valid_shape = len(hours_part) in (1, 2) and len(minutes_part) == 2
-    except (ValueError, KeyError):
-        raise ScheduleError("bad_time", until) from None
-    if not valid_shape or not 0 < minutes <= END_OF_DAY_MINUTES:
+    if not _TIME_FORMAT.fullmatch(until):
+        raise ScheduleError("bad_time", until)
+    minutes = parse_time(until)
+    if not 0 < minutes <= END_OF_DAY_MINUTES:
         raise ScheduleError("bad_time", until)
     return minutes
 
 
-def _checked_temperature(value: Any) -> float:
+def _checked_temperature(value: float | str) -> float:
     """Return the temperature if it is a half degree within the range the thermostat accepts."""
     temp = float(value)
     if not MIN_TEMPERATURE <= temp <= MAX_TEMPERATURE or (temp * 2) % 1:

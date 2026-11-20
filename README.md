@@ -223,7 +223,7 @@ reference** — it carries no license, and no code from it is included here.
 Planned and under consideration — **give a 👍 to what matters to you**, and bring your own ideas:
 
 - ✅ Weekly schedule: view (1.2.0) and set (1.3.0) the heating programme
-- 💡 Repair notice when the Cube is unreachable
+- ✅ Repair notices: Cube unreachable for six hours, radio time almost used up (1.5.0)
 - 💡 Diagnostic sensors (comfort/eco/min/max setpoints)
 
 ➡️ All ideas & voting: **[Discussions → Ideas](https://github.com/Ebenhoeh80/ha-maxcube/discussions/categories/ideas)**

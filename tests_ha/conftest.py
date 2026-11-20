@@ -145,6 +145,10 @@ class FakeCube:
         self._guard = threading.Lock()
         self.errors: dict[str, bool] = {}
         self.accept_writes = True
+        self.store_writes = True  # False: the Cube takes the message but shows the old programme
+        # Commands (target temperature, mode): raise this error, or answer with False.
+        self.command_error: type[OSError] | None = None
+        self.accept_commands = True
         self.written: list[tuple[str, str, list[dict[str, Any]]]] = []
 
     @contextmanager
@@ -159,6 +163,10 @@ class FakeCube:
         finally:
             with self._guard:
                 self.active -= 1
+
+    def _check_command(self) -> None:
+        if self.command_error is not None:
+            raise self.command_error("Cube not reachable")
 
     def update(self) -> None:
         with self._in_use():
@@ -189,19 +197,21 @@ class FakeCube:
 
     def write_day_schedule(self, thermostat: Any, day: str, slots: list[dict[str, Any]]) -> bool:
         self.written.append((thermostat.rf_address, day, slots))
-        if self.accept_writes:
+        if self.accept_writes and self.store_writes:
             thermostat.schedule[day] = slots  # the Cube would show it after a while; here at once
         return self.accept_writes
 
     def set_target_temperature(self, device: Any, temperature: float) -> bool:
         with self._in_use():
+            self._check_command()
             device.target_temperature = temperature
-        return True
+        return self.accept_commands
 
     def set_mode(self, device: Any, mode: int) -> bool:
         with self._in_use():
+            self._check_command()
             device.mode = mode
-        return True
+        return self.accept_commands
 
 
 @pytest.fixture

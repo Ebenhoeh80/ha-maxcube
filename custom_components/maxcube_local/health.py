@@ -8,6 +8,16 @@ from typing import Any
 
 ISSUE_BATTERY = "battery_low"
 ISSUE_ERROR = "device_error"
+ISSUE_UNREACHABLE = "cube_unreachable"
+ISSUE_RADIO_BUSY = "radio_busy"
+
+# The Cube counts as lost when it has not answered for this long.
+UNREACHABLE_AFTER = 6 * 3600  # seconds
+# The radio is "busy" when the duty cycle stays at or above HIGH for SUSTAIN seconds; the hint goes
+# away once it has dropped below LOW (the gap keeps it from flapping around the threshold).
+DUTY_HIGH = 90  # percent
+DUTY_LOW = 80  # percent
+DUTY_SUSTAIN = 600  # seconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,3 +45,37 @@ def find_problems(
         if status_of(device.rf_address).error:
             findings.append(DeviceFinding(ISSUE_ERROR, device.rf_address, name))
     return findings
+
+
+class DutyCycleWatch:
+    """Decides, with hysteresis, whether the Cube's radio has been busy for too long."""
+
+    def __init__(
+        self, high: int = DUTY_HIGH, low: int = DUTY_LOW, sustain: float = DUTY_SUSTAIN
+    ) -> None:
+        """Set the thresholds (percent) and how long the value must stay high (seconds)."""
+        self._high = high
+        self._low = low
+        self._sustain = sustain
+        self._high_since: float | None = None
+        self.active = False
+
+    def update(self, duty: int | None, now: float) -> bool:
+        """Feed one reading taken at ``now`` (monotonic seconds); return whether the hint applies.
+
+        An unknown reading (``None``) changes nothing.
+        """
+        if duty is None:
+            return self.active
+        if self.active:
+            if duty < self._low:
+                self.active = False
+                self._high_since = None
+        elif duty >= self._high:
+            if self._high_since is None:
+                self._high_since = now
+            if now - self._high_since >= self._sustain:
+                self.active = True
+        else:
+            self._high_since = None
+        return self.active

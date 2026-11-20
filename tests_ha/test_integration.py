@@ -766,3 +766,284 @@ async def test_two_quick_commands_are_read_back_within_a_few_seconds(
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
     assert cube.updates == before + 1
+
+
+@pytest.mark.parametrize("error", [OSError, TimeoutError, ConnectionResetError])
+async def test_a_command_that_cannot_reach_the_cube_is_a_translated_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, error: type[OSError]
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    cube.command_error = error
+    for service, data in (
+        ("set_temperature", {"temperature": 20.0}),
+        ("set_hvac_mode", {"hvac_mode": "auto"}),
+        ("set_preset_mode", {"preset_mode": "boost"}),
+    ):
+        with pytest.raises(HomeAssistantError) as raised:
+            await hass.services.async_call(
+                "climate", service, {"entity_id": entity_id, **data}, blocking=True
+            )
+        assert raised.value.translation_key == "cube_unreachable"
+        assert raised.value.translation_domain == DOMAIN
+        assert not isinstance(raised.value, OSError)
+
+
+async def test_a_command_the_cube_does_not_accept_is_a_translated_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    cube.accept_commands = False
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            "climate", "set_temperature", {"entity_id": entity_id, "temperature": 20.0}, blocking=True
+        )
+    assert raised.value.translation_key == "command_rejected"
+
+
+async def test_a_programme_write_that_cannot_reach_the_cube_is_a_translated_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+
+    def broken(*args: object) -> bool:
+        raise TimeoutError("timed out")
+
+    cube.write_day_schedule = broken  # type: ignore[method-assign]
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            "maxcube_local",
+            "set_schedule",
+            {
+                "entity_id": entity_id,
+                "days": ["monday"],
+                "periods": [{"until": "24:00", "temperature": 19.0}],
+            },
+            blocking=True,
+        )
+    assert raised.value.translation_key == "cube_unreachable"
+
+
+def _translations(name: str) -> dict:
+    import json
+    from pathlib import Path
+
+    base = Path(__file__).parent.parent / "custom_components" / "maxcube_local"
+    return json.loads((base / name).read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("file", ["strings.json", "translations/en.json", "translations/de.json"])
+async def test_every_preset_of_the_thermostat_has_a_translated_name(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, file: str
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    entry = er.async_get(hass).async_get(entity_id)
+    assert entry is not None and entry.translation_key == "thermostat"
+    presets = hass.states.get(entity_id).attributes["preset_modes"]
+    assert "on" in presets
+    states = _translations(file)["entity"]["climate"]["thermostat"]["state_attributes"]["preset_mode"]["state"]
+    assert set(presets) <= set(states)
+
+
+async def test_no_identifier_appears_anywhere_in_the_diagnostics(hass: HomeAssistant, cube: FakeCube) -> None:
+    """Search the whole report (as it is downloaded) for every address, serial number and name."""
+    import json
+
+    from custom_components.maxcube_local.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CUBE_SERIAL,
+        title=f"MAX! Cube ({CUBE_SERIAL})",
+        data={CONF_HOST: HOST, "port": 62910, CONF_CUBE_SERIAL: CUBE_SERIAL},
+    )
+    await _setup(hass, entry)
+    report = json.dumps(await async_get_config_entry_diagnostics(hass, entry), default=str)
+
+    identifiers = {
+        "host": HOST,
+        "serial of the Cube": CUBE_SERIAL,
+        "title": entry.title,
+        "unique id": entry.unique_id,
+        "room": '"Bad"',
+    }
+    for device in cube.devices:
+        identifiers[f"serial of {device.rf_address}"] = device.serial
+        identifiers[f"name of {device.rf_address}"] = device.name
+    for what, value in identifiers.items():
+        assert value not in report, f"{what} leaks into the diagnostics"
+    assert "192.168" not in report
+
+
+def _cube_issues(hass: HomeAssistant) -> set[str]:
+    from homeassistant.helpers import issue_registry as ir
+
+    return {
+        issue_id.split("_", 1)[1]
+        for (domain, issue_id) in ir.async_get(hass).issues
+        if domain == DOMAIN
+    }
+
+
+async def test_a_cube_that_stays_unreachable_for_six_hours_creates_a_repair_hint_that_clears(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.fail_updates = 10_000
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        await coordinator.async_refresh()
+        assert coordinator.last_update_success is False
+        assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=5, minutes=59))
+        await hass.async_block_till_done()
+        assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=6, minutes=1))
+        await hass.async_block_till_done()
+        assert "cube_unreachable_cube" in _cube_issues(hass)
+
+        cube.fail_updates = 0
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+    assert coordinator.last_update_success is True
+    assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+
+async def test_a_short_outage_creates_no_repair_hint(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.fail_updates = 1
+    cube.fail_with = TimeoutError
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    await coordinator.async_refresh()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=7))
+    await hass.async_block_till_done()
+    assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+
+async def test_a_sustained_high_radio_load_creates_a_repair_hint_with_hysteresis(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    clock = [1000.0]
+    with patch("custom_components.maxcube_local.issues.monotonic", lambda: clock[0]):
+        cube.duty_cycle = 95
+        await _setup(hass, config_entry)
+        coordinator = config_entry.runtime_data
+        assert "radio_busy_cube" not in _cube_issues(hass)
+
+        clock[0] += 300
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" not in _cube_issues(hass)
+
+        clock[0] += 400
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" in _cube_issues(hass)
+
+        cube.duty_cycle = 85  # between the thresholds: stays
+        clock[0] += 60
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" in _cube_issues(hass)
+
+        cube.duty_cycle = 70
+        clock[0] += 60
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" not in _cube_issues(hass)
+
+
+async def test_the_cube_repair_hints_are_removed_when_the_entry_unloads(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    clock = [0.0]
+    with patch("custom_components.maxcube_local.issues.monotonic", lambda: clock[0]):
+        cube.duty_cycle = 99
+        await _setup(hass, config_entry)
+        clock[0] = 10_000
+        await config_entry.runtime_data.async_refresh()
+        assert "radio_busy_cube" in _cube_issues(hass)
+        assert await hass.config_entries.async_unload(config_entry.entry_id)
+        await hass.async_block_till_done()
+    assert not _cube_issues(hass)
+
+
+async def _write_monday(hass: HomeAssistant, entity_id: str, temperature: float) -> None:
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {
+            "entity_id": entity_id,
+            "days": ["monday"],
+            "periods": [{"until": "24:00", "temperature": temperature}],
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+
+async def test_every_programme_write_keeps_one_check_and_no_callback_behind(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    coordinator = config_entry.runtime_data
+    cube.store_writes = False
+    registered = len(config_entry._on_unload or [])
+
+    for temperature in (18.0, 19.0, 20.0):
+        await _write_monday(hass, entity_id, temperature)
+
+    assert len(coordinator._verify_timers) == 1
+    assert len(config_entry._on_unload or []) == registered  # nothing added per write
+    # The newest programme is the one that gets checked.
+    assert coordinator._verify_days[RADIATOR]["monday"][0]["temp"] == 20.0
+
+
+async def test_the_lifecycle_leaves_no_tasks_or_listeners_behind(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+    from homeassistant.helpers import issue_registry as ir
+
+    await _setup(hass, config_entry)
+    first = config_entry.runtime_data
+    cube.store_writes = False
+    await _write_monday(hass, _entity_id(hass, "climate", RADIATOR), 18.0)
+    assert first._verify_timers
+
+    # Reload: the old coordinator is shut down completely, a new one runs.
+    assert await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert config_entry.runtime_data is not first
+    assert not first._verify_timers and not first._listeners
+
+    # Home Assistant stops, then the entries are unloaded.
+    second = config_entry.runtime_data
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.NOT_LOADED
+    assert not second._verify_timers and not second._listeners
+    assert second._unsub_refresh is None
+    assert not [1 for (domain, _) in ir.async_get(hass).issues if domain == DOMAIN]

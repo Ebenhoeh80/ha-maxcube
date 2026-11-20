@@ -115,6 +115,8 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     """A MAX! radiator or wall thermostat."""
 
     _attr_name = None
+    # The names of the presets are translated (``entity.climate.thermostat`` in strings.json).
+    _attr_translation_key = "thermostat"
     # The programme is large and rarely changes: keep it out of the history database.
     _unrecorded_attributes = frozenset({"schedule"})
     if _NATIVE_TEMPERATURES:
@@ -306,7 +308,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             return PRESET_ECO
         return PRESET_NONE
 
-    async def async_set_temperature(self, **kwargs: Any) -> None:
+    async def async_set_temperature(self, **kwargs: Any) -> None:  # noqa: ANN401
         """Set a new target temperature."""
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is not None:
@@ -343,11 +345,13 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
                 await self._set_target_temperature(eco)
 
     async def _set_target_temperature(self, temperature: float) -> None:
-        await self.coordinator.async_cube_call(
+        await self.coordinator.async_cube_command(
             self.coordinator.cube.set_target_temperature, self._device, temperature
         )
         await self.coordinator.async_request_refresh()
 
     async def _set_mode(self, mode: int) -> None:
-        await self.coordinator.async_cube_call(self.coordinator.cube.set_mode, self._device, mode)
+        await self.coordinator.async_cube_command(
+            self.coordinator.cube.set_mode, self._device, mode
+        )
         await self.coordinator.async_request_refresh()

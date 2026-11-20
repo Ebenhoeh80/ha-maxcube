@@ -12,8 +12,18 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
     "SIM", # flake8-simplify
+    "RET", # flake8-return
+    "PL",  # pylint
+    "C901", # complexity (max 10)
+    "ANN", # type annotations
 ]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests import inside functions on purpose (Home Assistant is only needed there), compare with the
+# literal values they expect and need no type annotations on helpers.
+"tests/**" = ["PLR2004", "PLC0415", "ANN"]
+"tests_ha/**" = ["PLR2004", "PLC0415", "ANN"]
 
 [tool.mypy]
 python_version = "3.13"

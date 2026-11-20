@@ -29,7 +29,7 @@ measured, with date and method. Last updated: 2026-11-20 (after release 1.3.2).
 
 ## 2. Concurrency and lifecycle
 
-- **All Cube calls are serialised** (`coordinator.async_cube_call`, an `asyncio.Lock`). Before 1.4.0 a poll
+- **All Cube calls are serialised** (`coordinator.async_cube_call`, an `asyncio.Lock`; a second lock keeps a programme write and its read-back together and cannot be merged with the first, which the read-back needs). Before 1.4.0 a poll
   and a command ran in different executor threads on the same connection object and could overlap. A test
   that records how many threads are inside a Cube call at once failed on the old code
   (`assert 2 == 1`) and passes now.
@@ -46,7 +46,9 @@ measured, with date and method. Last updated: 2026-11-20 (after release 1.3.2).
 | Cube got a new DHCP address | polls fail | found by serial number, saved, entry reloads |
 | MAX! app holds the single connection | a poll is refused | one repeat after 1 s (refused/reset only); timeouts are not repeated |
 | Poll and command overlap | one is refused | calls are serialised (see above) |
-| Duty cycle at 90 % or more | programme writes would be dropped | the service refuses to write |
+| Duty cycle at 90 % or more | programme writes would be dropped | the service refuses to write; a repair hint appears after ten minutes and clears below 80 % |
+| Cube unreachable for more than six hours | all devices unavailable | repair hint (timer from the first failed poll), cleared by the next successful poll |
+| Command cannot reach the Cube, or is refused | the user action fails | translated `HomeAssistantError` (`cube_unreachable`, `command_rejected`) |
 | Device removed from the Cube | stale device in Home Assistant | removed from the registry after the next reload or restart (the library only adds devices) |
 | Empty device list after a failed read | would wipe the registry | an empty list is never trusted |
 
@@ -70,7 +72,7 @@ no-change target writes raised the Cube's duty cycle from 4 % to 21 % (it decays
 
 | Judge | Gate | Result 2026-11-20 |
 |---|---|---|
-| Ruff (E, W, F, I, B, C4, UP, SIM) | no findings | pass; extended rules (RET, PL, C901, ANN): 0 findings (18 before) |
+| Ruff (E, W, F, I, B, C4, UP, SIM, RET, PL, C901, ANN) | no findings | pass (tests are exempt from PLR2004, PLC0415 and ANN) |
 | MyPy with the real Home Assistant types | no errors | pass (12 before) |
 | pytest, unit tests (Python 3.12, 3.13) | all pass | 46 passed |
 | pytest in a real Home Assistant core | all pass | 38 passed |
@@ -93,6 +95,4 @@ Not run: SonarQube, Semgrep, py-spy, Scalene (not available on the development m
 
 ## 7. Open items
 
-- Pull request #3 (see above); then the 1.4.0 release with the repair hints, diagnostics download,
-  reconfigure flow, Gold quality scale and the fixes in this document.
 - Platinum rules.
