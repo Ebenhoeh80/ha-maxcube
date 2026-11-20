@@ -190,6 +190,14 @@
     "device_error": {
       "title": "Gerät meldet einen Fehler: {name}",
       "description": "Das MAX!-Gerät {name} meldet dem Cube einen Fehler. Bitte prüfen, ob es richtig auf dem Heizkörperventil sitzt, die Batterien in Ordnung sind und es in Funkreichweite des Cubes liegt."
+    },
+    "cube_unreachable": {
+      "title": "MAX! Cube nicht erreichbar",
+      "description": "{title} hat seit mehr als sechs Stunden nicht geantwortet. Prüfen Sie, ob der Cube eingeschaltet und mit dem Netzwerk verbunden ist und die hier gespeicherte Adresse hat (er wird automatisch über seine Seriennummer gesucht). Der Hinweis verschwindet von selbst, sobald der Cube wieder antwortet."
+    },
+    "radio_busy": {
+      "title": "MAX! Cube: Funkzeit fast aufgebraucht",
+      "description": "Die Funkauslastung von {title} liegt seit einiger Zeit bei 90 % oder mehr. Bei 100 % sendet der Cube etwa eine Stunde lang keine Befehle an die Thermostate. Vermeiden Sie vorerst viele schnelle Änderungen und Programm-Schreibvorgänge. Der Hinweis verschwindet, sobald der Wert unter 80 % gefallen ist."
     }
   }
 }

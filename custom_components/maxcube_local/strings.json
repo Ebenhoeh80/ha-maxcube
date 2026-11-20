@@ -190,6 +190,14 @@
     "device_error": {
       "title": "Device reports an error: {name}",
       "description": "The MAX! device {name} reports an error to the Cube. Check that it sits properly on the radiator valve, that its batteries are fine and that it is within radio range of the Cube."
+    },
+    "cube_unreachable": {
+      "title": "MAX! Cube not reachable",
+      "description": "{title} has not answered for more than six hours. Check that the Cube is switched on, connected to the network and has the address saved here (it is searched by its serial number automatically). The repair hint goes away by itself as soon as the Cube answers again."
+    },
+    "radio_busy": {
+      "title": "MAX! Cube radio time almost used up",
+      "description": "The radio duty cycle of {title} has been at 90 % or more for some time. At 100 % the Cube stops sending commands to the thermostats for about an hour. Avoid many quick changes and programme writes for now. The hint goes away once the value has fallen below 80 %."
     }
   }
 }

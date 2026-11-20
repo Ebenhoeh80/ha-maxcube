@@ -878,3 +878,109 @@ async def test_no_identifier_appears_anywhere_in_the_diagnostics(hass: HomeAssis
     for what, value in identifiers.items():
         assert value not in report, f"{what} leaks into the diagnostics"
     assert "192.168" not in report
+
+
+def _cube_issues(hass: HomeAssistant) -> set[str]:
+    from homeassistant.helpers import issue_registry as ir
+
+    return {
+        issue_id.split("_", 1)[1]
+        for (domain, issue_id) in ir.async_get(hass).issues
+        if domain == DOMAIN
+    }
+
+
+async def test_a_cube_that_stays_unreachable_for_six_hours_creates_a_repair_hint_that_clears(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.fail_updates = 10_000
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        await coordinator.async_refresh()
+        assert coordinator.last_update_success is False
+        assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=5, minutes=59))
+        await hass.async_block_till_done()
+        assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=6, minutes=1))
+        await hass.async_block_till_done()
+        assert "cube_unreachable_cube" in _cube_issues(hass)
+
+        cube.fail_updates = 0
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+    assert coordinator.last_update_success is True
+    assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+
+async def test_a_short_outage_creates_no_repair_hint(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.fail_updates = 1
+    cube.fail_with = TimeoutError
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    await coordinator.async_refresh()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=7))
+    await hass.async_block_till_done()
+    assert "cube_unreachable_cube" not in _cube_issues(hass)
+
+
+async def test_a_sustained_high_radio_load_creates_a_repair_hint_with_hysteresis(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    clock = [1000.0]
+    with patch("custom_components.maxcube_local.issues.monotonic", lambda: clock[0]):
+        cube.duty_cycle = 95
+        await _setup(hass, config_entry)
+        coordinator = config_entry.runtime_data
+        assert "radio_busy_cube" not in _cube_issues(hass)
+
+        clock[0] += 300
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" not in _cube_issues(hass)
+
+        clock[0] += 400
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" in _cube_issues(hass)
+
+        cube.duty_cycle = 85  # between the thresholds: stays
+        clock[0] += 60
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" in _cube_issues(hass)
+
+        cube.duty_cycle = 70
+        clock[0] += 60
+        await coordinator.async_refresh()
+        assert "radio_busy_cube" not in _cube_issues(hass)
+
+
+async def test_the_cube_repair_hints_are_removed_when_the_entry_unloads(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    clock = [0.0]
+    with patch("custom_components.maxcube_local.issues.monotonic", lambda: clock[0]):
+        cube.duty_cycle = 99
+        await _setup(hass, config_entry)
+        clock[0] = 10_000
+        await config_entry.runtime_data.async_refresh()
+        assert "radio_busy_cube" in _cube_issues(hass)
+        assert await hass.config_entries.async_unload(config_entry.entry_id)
+        await hass.async_block_till_done()
+    assert not _cube_issues(hass)

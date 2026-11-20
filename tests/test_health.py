@@ -27,3 +27,34 @@ def test_low_battery_and_error_are_reported_separately() -> None:
 def test_the_address_names_a_device_without_a_name() -> None:
     (finding,) = health.find_problems([device("abc", name=None, battery=1)], lambda _: NS(error=False))
     assert finding.name == "abc"
+
+
+def test_the_radio_hint_needs_a_sustained_high_value() -> None:
+    watch = health.DutyCycleWatch(high=90, low=80, sustain=600)
+    assert not watch.update(95, 0)
+    assert not watch.update(96, 599)
+    assert watch.update(92, 600)
+
+
+def test_a_short_peak_does_not_count() -> None:
+    watch = health.DutyCycleWatch(high=90, low=80, sustain=600)
+    watch.update(95, 0)
+    assert not watch.update(50, 300)  # dropped: the clock starts again
+    assert not watch.update(95, 400)
+    assert not watch.update(95, 900)  # only 500 s since the new start
+    assert watch.update(95, 1000)
+
+
+def test_the_hint_stays_until_the_value_is_below_the_lower_threshold() -> None:
+    watch = health.DutyCycleWatch(high=90, low=80, sustain=0)
+    assert watch.update(90, 0)
+    assert watch.update(85, 10)  # between the thresholds: unchanged
+    assert not watch.update(79, 20)
+    assert not watch.update(85, 30)  # not high again yet
+
+
+def test_an_unknown_value_changes_nothing() -> None:
+    watch = health.DutyCycleWatch(high=90, low=80, sustain=0)
+    assert not watch.update(None, 0)
+    watch.update(95, 1)
+    assert watch.update(None, 2)
