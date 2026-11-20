@@ -46,6 +46,10 @@ type MaxCubeConfigEntry = ConfigEntry[MaxCubeCoordinator]
 MIN_STALE_AFTER = 90
 
 
+class WrongCubeError(OSError):
+    """A different Cube than the one of this entry answers at the saved address."""
+
+
 class MaxCubeCoordinator(DataUpdateCoordinator[None]):
     """Owns the blocking MaxCube object and refreshes it in the executor."""
 
@@ -95,10 +99,23 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
     def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
         cube = LinkStatusMaxCube(self._host, self._port, now=dt_util.now)
+        try:
+            self._check_identity(cube)
+        except WrongCubeError:
+            cube.disconnect()
+            raise
         # From now on every poll opens its own short connection (see the module docstring).
         cube.use_persistent_connection = False
         cube.disconnect()
         return cube
+
+    def _check_identity(self, cube: LinkStatusMaxCube) -> None:
+        """Make sure the Cube that answers is the one this entry belongs to (compared by serial number)."""
+        expected = self.config_entry.data.get(CONF_CUBE_SERIAL)
+        if expected and cube.serial and cube.serial != expected:
+            raise WrongCubeError(
+                f"Another MAX! Cube ({cube.serial}) answers at {self._host}; this entry belongs to {expected}"
+            )
 
     async def _async_setup(self) -> None:
         """Open the connection once before the first refresh.
@@ -108,11 +125,11 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         """
         try:
             self._cube = await self.hass.async_add_executor_job(self._connect)
-        except (OSError, TimeoutError):
+        except (OSError, TimeoutError) as err:
             self._last_rediscovery = time.monotonic()
             new_host = await self._async_find_new_host()
             if new_host is None:
-                raise
+                raise UpdateFailed(f"Cannot reach the MAX! Cube at {self._host}: {err}") from err
             self._adopt_host(new_host)
             self._cube = await self.hass.async_add_executor_job(self._connect)
 
@@ -123,6 +140,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             return
         try:
             await self._async_poll(self._cube)
+            self._check_identity(self._cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
@@ -186,7 +204,11 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         return None
 
     def _adopt_host(self, new_host: str) -> None:
-        """Save a new address of the Cube and use it from now on."""
+        """Save a new address of the Cube and use it from now on.
+
+        Only the address changes: the identity of the entry (serial number) and its title stay.
+        The update listener of the entry reloads it with the new address.
+        """
         _LOGGER.warning(
             "MAX! Cube %s moved from %s to %s",
             self.config_entry.data.get(CONF_CUBE_SERIAL),
@@ -195,9 +217,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         )
         self._host = new_host
         self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            data={**self.config_entry.data, CONF_HOST: new_host},
-            unique_id=new_host,
+            self.config_entry, data={**self.config_entry.data, CONF_HOST: new_host}
         )
 
     def _send_days(self, device: MaxDevice, days: dict[str, list[dict]]) -> dict[str, bool]:

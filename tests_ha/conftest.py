@@ -51,6 +51,13 @@ def _enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load integrations from ``custom_components/``."""
 
 
+@pytest.fixture(autouse=True)
+def _no_network_scan() -> Iterator[None]:
+    """The scan after startup would open a socket; the tests that want it patch it themselves."""
+    with patch("custom_components.maxcube_local.discover_cubes", return_value=[]):
+        yield
+
+
 def _thermostat() -> MaxThermostat:
     device = MaxThermostat()
     device.type = MAX_THERMOSTAT

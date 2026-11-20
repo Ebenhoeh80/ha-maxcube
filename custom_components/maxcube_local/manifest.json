@@ -5,6 +5,7 @@
   "codeowners": ["@Ebenhoeh80"],
   "config_flow": true,
   "connectivity": ["network"],
+  "dhcp": [{ "macaddress": "001A22*" }],
   "documentation": "https://github.com/Ebenhoeh80/ha-maxcube",
   "integration_type": "hub",
   "iot_class": "local_polling",
@@ -12,5 +13,5 @@
   "loggers": ["maxcube"],
   "quality_scale": "gold",
   "requirements": ["maxcube-api>=0.4.3"],
-  "version": "1.3.2"
+  "version": "1.3.3"
 }

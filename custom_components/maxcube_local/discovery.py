@@ -55,16 +55,22 @@ def discover_cubes(timeout: float = 2.0) -> list[dict[str, str]]:
     simply means nothing was found.
     """
     cubes: dict[str, str] = {}
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    except OSError:
+        return []  # no usable network interface
     try:
         # Binding to the discovery port catches replies that some Cubes broadcast back; if it is
         # busy, fall back to an ephemeral port (the Cube still answers the unicast source port).
         with contextlib.suppress(OSError):
             sock.bind(("", DISCOVERY_PORT))
         sock.settimeout(timeout)
-        sock.sendto(_REQUEST, ("255.255.255.255", DISCOVERY_PORT))
+        try:
+            sock.sendto(_REQUEST, ("255.255.255.255", DISCOVERY_PORT))
+        except OSError:
+            return []  # network unreachable
         while True:
             try:
                 data, addr = sock.recvfrom(1024)

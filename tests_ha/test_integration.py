@@ -254,7 +254,7 @@ async def test_the_cube_is_found_again_under_a_new_address(
         await coordinator.async_refresh()
         await hass.async_block_till_done()
     assert config_entry.data[CONF_HOST] == NEW_HOST
-    assert config_entry.unique_id == NEW_HOST
+    assert config_entry.unique_id == CUBE_SERIAL  # the address changed, the identity did not
 
 
 async def test_another_cube_is_not_taken_for_ours(
@@ -318,20 +318,40 @@ async def test_the_diagnostics_hide_addresses_and_names(
     assert data["devices"][0]["raw_flags"] == "0200"
 
 
-async def test_reconfigure_changes_the_address_and_keeps_the_entry(
+async def test_reconfigure_changes_the_address_and_keeps_the_identity(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
     await _setup(hass, config_entry)
+    title = config_entry.title
     result = await config_entry.start_reconfigure_flow(hass)
     assert result["step_id"] == "reconfigure"
-    with patch("custom_components.maxcube_local.config_flow._try_connect"):
+    with patch(
+        "custom_components.maxcube_local.config_flow._try_connect", return_value=CUBE_SERIAL
+    ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
         )
         await hass.async_block_till_done()
     assert result["type"] == "abort" and result["reason"] == "reconfigure_successful"
     assert config_entry.data[CONF_HOST] == NEW_HOST
-    assert config_entry.unique_id == NEW_HOST
+    assert config_entry.unique_id == CUBE_SERIAL  # the address changed, the identity did not
+    assert config_entry.title == title
+
+
+async def test_reconfigure_refuses_another_cube(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await config_entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.maxcube_local.config_flow._try_connect", return_value="KEQ9999999"
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+    assert result["type"] == "abort" and result["reason"] == "wrong_cube"
+    assert config_entry.data[CONF_HOST] == HOST
+    assert config_entry.unique_id == CUBE_SERIAL
 
 
 async def test_reconfigure_shows_an_error_when_the_new_address_does_not_answer(
@@ -349,7 +369,9 @@ async def test_reconfigure_shows_an_error_when_the_new_address_does_not_answer(
 async def test_the_user_flow_creates_an_entry(hass: HomeAssistant, cube: FakeCube) -> None:
     with (
         patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]),
-        patch("custom_components.maxcube_local.config_flow._try_connect"),
+        patch(
+            "custom_components.maxcube_local.config_flow._try_connect", return_value=CUBE_SERIAL
+        ),
     ):
         result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
         assert result["step_id"] == "user"
@@ -359,6 +381,8 @@ async def test_the_user_flow_creates_an_entry(hass: HomeAssistant, cube: FakeCub
         await hass.async_block_till_done()
     assert result["type"] == "create_entry"
     assert result["data"][CONF_HOST] == "192.168.10.70"
+    assert result["data"][CONF_CUBE_SERIAL] == CUBE_SERIAL
+    assert result["result"].unique_id == CUBE_SERIAL
 
 
 async def test_the_user_flow_reports_an_unreachable_cube_and_prefills_a_found_one(
@@ -379,7 +403,12 @@ async def test_the_user_flow_refuses_a_cube_that_is_already_configured(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
     config_entry.add_to_hass(hass)
-    with patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]):
+    with (
+        patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]),
+        patch(
+            "custom_components.maxcube_local.config_flow._try_connect", return_value=CUBE_SERIAL
+        ),
+    ):
         result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_HOST: config_entry.data[CONF_HOST], "port": 62910}
