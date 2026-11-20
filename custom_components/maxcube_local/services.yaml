@@ -5,3 +5,9 @@ reconnect:
       selector:
         config_entry:
           integration: maxcube_local
+
+get_schedule:
+  target:
+    entity:
+      integration: maxcube_local
+      domain: climate

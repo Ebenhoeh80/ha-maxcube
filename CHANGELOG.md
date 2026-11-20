@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-20
+
+### Added
+- **Weekly heating programme (read-only).** The programme of each radiator thermostat is shown in the
+  climate entity's `schedule` attribute: for every day the setpoints with the time until which each
+  temperature applies. Wall thermostats show the programme of a radiator thermostat in the same room.
+  `scheduled_temperature` is the temperature the programme sets right now. The programme is decoded
+  with exact half degrees (the `maxcube-api` library cuts 21.5 to 21), and the large attribute is kept
+  out of the history database.
+- **Service `maxcube_local.get_schedule`** returns the weekly programme of the chosen thermostats as a
+  response.
+- Tests for the decoding (day order, half degrees, end of day, the C message).
+
 ## [1.1.0] - 2026-11-20
 
 ### Added

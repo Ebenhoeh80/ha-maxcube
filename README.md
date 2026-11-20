@@ -28,6 +28,10 @@ integration that ships with Home Assistant Core.
   - presets Boost, Comfort, Eco, Away,
   - heating action derived from the valve position,
   - comfort/eco setpoints and valve position as extra attributes.
+- **Weekly heating programme** (read-only for now): the programme of each thermostat is shown in the
+  climate entity's `schedule` attribute (for every day the setpoints with the time until which each
+  temperature applies, with exact half degrees), together with `scheduled_temperature`, the temperature
+  the programme sets right now. The service `maxcube_local.get_schedule` returns it as a response.
 - **Sensors**: measured temperature per thermostat and valve opening (%) per
   radiator thermostat.
 - **Binary sensors**: window/door contacts and per-device low-battery warnings.
@@ -112,7 +116,8 @@ reference** — it carries no license, and no code from it is included here.
 
 Planned and under consideration — **give a 👍 to what matters to you**, and bring your own ideas:
 
-- 🔜 Weekly schedule: view and set the heating programme
+- ✅ Weekly schedule: view the heating programme (1.2.0)
+- 🔜 Weekly schedule: set the heating programme
 - 💡 Repair notice when the Cube is unreachable
 - 💡 Diagnostic sensors (comfort/eco/min/max setpoints)
 

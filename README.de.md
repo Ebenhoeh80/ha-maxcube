@@ -28,6 +28,10 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
   - Presets Boost, Komfort, Eco, Abwesend,
   - Heizaktion aus der Ventilstellung abgeleitet,
   - Komfort-/Eco-Sollwerte und Ventilstellung als Zusatz-Attribute.
+- **Wochen-Heizprogramm** (vorerst nur lesen): Das Programm jedes Thermostats steht im Attribut `schedule`
+  der Klima-Entität (je Tag die Schaltpunkte mit der Uhrzeit, bis zu der die jeweilige Temperatur gilt, mit
+  genauen halben Grad), dazu `scheduled_temperature`, die Temperatur, die das Programm gerade vorgibt. Der
+  Dienst `maxcube_local.get_schedule` gibt es als Antwort zurück.
 - **Sensoren**: gemessene Temperatur je Thermostat und Ventilöffnung (%) je
   Heizkörperthermostat.
 - **Cube-Diagnose**: die **Funkauslastung** (%) und die Zahl der **freien Speicherplätze**, bei jeder
@@ -116,7 +120,8 @@ herangezogen — es hat keine Lizenz, und es ist kein Code daraus enthalten.
 
 Geplant und in Prüfung — **gib dem ein 👍, was dir wichtig ist**, und bring eigene Ideen ein:
 
-- 🔜 Wochenprogramm: Heizplan anzeigen und setzen
+- ✅ Wochenprogramm: Heizplan anzeigen (1.2.0)
+- 🔜 Wochenprogramm: Heizplan setzen
 - 💡 Reparatur-Hinweis, wenn der Cube nicht erreichbar ist
 - 💡 Diagnose-Sensoren (Komfort-/Eco-/Min-/Max-Sollwerte)
 

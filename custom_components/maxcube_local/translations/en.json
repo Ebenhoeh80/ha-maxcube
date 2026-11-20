@@ -50,6 +50,10 @@
           "description": "Optional: only this Cube. Without it, all configured Cubes are reconnected."
         }
       }
+    },
+    "get_schedule": {
+      "name": "Get schedule",
+      "description": "Return the weekly heating programme of a thermostat (for each day the setpoints with the time until which each temperature applies)."
     }
   },
   "exceptions": {
