@@ -145,7 +145,7 @@ async def test_a_legacy_entry_is_migrated_even_while_the_cube_is_offline(hass: H
     entry = _legacy()
     entry.add_to_hass(hass)
     with (
-        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", side_effect=OSError("timed out")),
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", side_effect=OSError("timed out")),
         patch(COORD_DISCOVER, return_value=[]),
     ):
         assert not await hass.config_entries.async_setup(entry.entry_id)
@@ -167,7 +167,7 @@ async def test_an_entry_without_a_serial_is_finished_when_the_cube_answers_later
         return cube
 
     with (
-        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", build),
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", build),
         patch(COORD_DISCOVER, return_value=[]),
     ):
         assert not await hass.config_entries.async_setup(entry.entry_id)
@@ -248,7 +248,7 @@ async def test_the_address_is_found_when_another_cube_took_the_old_one(hass: Hom
         return cube
 
     with (
-        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", build),
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", build),
         patch(COORD_DISCOVER, return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}]),
         patch(COORD_REACHABLE, return_value=True),
     ):
