@@ -12,15 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the serial number (`MAX! Cube JEQ0355273`); before, both contained the address, which changed with every new
   address and showed a wrong title. Existing entries are migrated at the next start (a title you chose stays);
   devices, entities, areas and history are not touched. See [`docs/IDENTITY.md`](docs/IDENTITY.md).
-- **Discovery:** after startup the integration looks for Cubes once. A new Cube appears under *Discovered*; a known
-  Cube whose address changed gets the new address and is reloaded once.
+- **Discovery:** Home Assistant now finds a Cube by its DHCP request (hardware address prefix of eQ-3): the first
+  Cube appears under *Discovered*, and a known Cube that got a new address is followed. After startup the integration
+  also scans once for Cubes it does not know or whose address changed.
+- **One Cube, one entry:** a second entry for a Cube that already has one stops with a clear message instead of
+  creating every device twice.
 - **The Cube that answers must be the Cube of the entry:** a different Cube at the saved address is no longer taken
   over; the right one is looked up by its serial number.
-- Changed options reload the entry; a new address no longer causes a second reload.
+- The entry reloads (once) when the options or the address change, scheduled by its update listener.
 
 ### Fixed
 - The connection test of the setup dialog did not close its connection, so the Cube stayed occupied until it was
-  cleaned up.
+  cleaned up; an unexpected error in the dialog is shown as "unknown".
+- A failed setup because the Cube is off logs one line instead of a full error trace.
+- The broadcast search no longer raises when the machine has no usable network interface.
 
 ## [1.3.2] - 2026-11-20
 

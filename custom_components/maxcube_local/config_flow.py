@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
 
 from maxcube.cube import MaxCube
 import voluptuous as vol
@@ -25,6 +26,11 @@ from .const import (
 from .coordinator import MaxCubeConfigEntry
 from .discovery import discover_cubes
 from .identity import cube_title
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _try_connect(host: str, port: int) -> str | None:
@@ -59,18 +65,27 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             host = user_input[CONF_HOST]
             port = user_input[CONF_PORT]
+            serial: str | None = None
             try:
                 serial = await self.hass.async_add_executor_job(_try_connect, host, port)
             except OSError:
-                serial = None
-            if not serial:
+                pass
+            except Exception:  # noqa: BLE001 - shown to the user as an unknown error
+                _LOGGER.exception("Unexpected error while connecting to the MAX! Cube")
+                errors["base"] = "unknown"
+            if errors:
+                suggested_host = host
+            elif not serial:
                 errors["base"] = "cannot_connect"
                 suggested_host = host
             else:
                 # The Cube is identified by its serial number, never by the address it was found at.
-                await self.async_set_unique_id(serial)
-                self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
-                self._abort_if_known_by_address(serial, host)
+                # (Another flow for the same Cube, for example a discovery, does not block adding it here.)
+                await self.async_set_unique_id(serial, raise_on_progress=False)
+                self._abort_if_unique_id_configured(
+                    updates={CONF_HOST: host, CONF_PORT: port}, reload_on_update=False
+                )
+                self._abort_if_known(serial, host)
                 return self.async_create_entry(
                     title=cube_title(serial),
                     data={CONF_HOST: host, CONF_PORT: port, CONF_CUBE_SERIAL: serial},
@@ -105,39 +120,70 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
         Entries created by versions up to 1.3.2 have the address as their unique id until they are
         migrated (at the next setup); they must not be offered or added a second time.
         """
+        entry = self._entry_with_serial(serial)
+        if entry is not None:
+            return entry
         for entry in self._async_current_entries(include_ignore=False):
-            if entry.unique_id == serial:
-                return entry
-            if entry.data.get(CONF_CUBE_SERIAL) == serial:
-                return entry
             if entry.data.get(CONF_CUBE_SERIAL) is None and entry.data.get(CONF_HOST) == host:
                 return entry
         return None
 
-    def _abort_if_known_by_address(self, serial: str, host: str) -> None:
-        """Abort if a not yet migrated entry manages this Cube."""
-        if self._known_entry(serial, host) is not None:
-            raise AbortFlow("already_configured")
+    def _entry_with_serial(self, serial: str) -> ConfigEntry | None:
+        """Return the entry that is known to manage the Cube with this serial number."""
+        for entry in self._async_current_entries(include_ignore=False):
+            if serial in (entry.unique_id, entry.data.get(CONF_CUBE_SERIAL)):
+                return entry
+        return None
+
+    def _abort_if_known(self, serial: str, host: str) -> None:
+        """Abort if an entry that is not migrated yet manages this Cube (keeping its address up to date)."""
+        known = self._known_entry(serial, host)
+        if known is None:
+            return
+        if known.data.get(CONF_CUBE_SERIAL) == serial and known.data.get(CONF_HOST) != host:
+            # The same Cube under a new address; the update listener reloads the entry.
+            self.hass.config_entries.async_update_entry(known, data={**known.data, CONF_HOST: host})
+        raise AbortFlow("already_configured")
 
     async def async_step_integration_discovery(
         self, discovery_info: dict[str, Any]
     ) -> ConfigFlowResult:
-        """Handle a Cube found by the integration's own broadcast scan.
+        """Handle a Cube found by the integration's own broadcast scan."""
+        return await self._async_handle_discovery(
+            discovery_info[CONF_CUBE_SERIAL], discovery_info[CONF_HOST]
+        )
 
-        A Cube that is already set up gets its new address and the entry is reloaded
-        (``updates``); a new Cube is offered in the list of discovered devices.
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
+        """Handle a device whose hardware address belongs to eQ-3 (a Cube, or another eQ-3 device).
+
+        Home Assistant sees the DHCP request of a Cube when it starts or gets a new address, so this
+        finds the first Cube and follows a Cube whose address changed.
         """
-        serial = discovery_info[CONF_CUBE_SERIAL]
-        host = discovery_info[CONF_HOST]
+        host = discovery_info.ip
+        try:
+            serial = await self.hass.async_add_executor_job(_try_connect, host, DEFAULT_PORT)
+        except Exception:  # noqa: BLE001 - another eQ-3 device, or the Cube is busy
+            return self.async_abort(reason="cannot_connect")
+        if not serial:
+            return self.async_abort(reason="cannot_connect")
+        return await self._async_handle_discovery(serial, host)
+
+    async def _async_handle_discovery(self, serial: str, host: str) -> ConfigFlowResult:
+        """A Cube answered at ``host``: update the address of a known Cube, or offer a new one.
+
+        The update listener of the entry reloads it; the flow does not reload (``reload_on_update=False``).
+        An entry that has no serial number yet is matched by its address only and left unchanged: another
+        Cube may have taken that address, the migration at its next setup settles it.
+        """
         await self.async_set_unique_id(serial)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host}, reload_on_update=False)
         known = self._known_entry(serial, host)
         if known is not None:
-            return self.async_update_reload_and_abort(
-                known,
-                data_updates={CONF_HOST: host, CONF_CUBE_SERIAL: serial},
-                reason="already_configured",
-            )
+            if known.data.get(CONF_CUBE_SERIAL) == serial and known.data.get(CONF_HOST) != host:
+                self.hass.config_entries.async_update_entry(
+                    known, data={**known.data, CONF_HOST: host}
+                )
+            return self.async_abort(reason="already_configured")
         self._discovered = {CONF_HOST: host, CONF_CUBE_SERIAL: serial}
         self.context["title_placeholders"] = {"name": cube_title(serial)}
         return await self.async_step_discovery_confirm()
@@ -156,7 +202,6 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_CUBE_SERIAL: serial,
                 },
             )
-        self._set_confirm_only()
         return self.async_show_form(
             step_id="discovery_confirm",
             description_placeholders={"serial": serial, "host": self._discovered[CONF_HOST]},

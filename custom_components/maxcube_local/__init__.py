@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ConfigEntryError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import discovery_flow
 from homeassistant.helpers.start import async_at_started
@@ -71,6 +71,8 @@ async def _async_scan_for_cubes(hass: HomeAssistant) -> None:
     """Broadcast once after startup and start a discovery flow for every Cube that answers."""
     cubes = await hass.async_add_executor_job(discover_cubes)
     for cube in cubes:
+        if _is_known_unchanged(hass, cube):
+            continue  # nothing to do, and the Cube need not be disturbed
         if await hass.async_add_executor_job(is_reachable, cube["host"], DEFAULT_PORT):
             discovery_flow.async_create_flow(
                 hass,
@@ -78,6 +80,14 @@ async def _async_scan_for_cubes(hass: HomeAssistant) -> None:
                 context={"source": SOURCE_INTEGRATION_DISCOVERY},
                 data={CONF_HOST: cube["host"], CONF_CUBE_SERIAL: cube["serial"]},
             )
+
+
+def _is_known_unchanged(hass: HomeAssistant, cube: dict[str, str]) -> bool:
+    """Return True if an entry already manages this Cube under this address."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if cube["serial"] in (entry.unique_id, entry.data.get(CONF_CUBE_SERIAL)):
+            return bool(entry.data.get(CONF_HOST) == cube["host"])
+    return False
 
 
 @callback
@@ -90,13 +100,7 @@ def _async_apply_identity(hass: HomeAssistant, entry: MaxCubeConfigEntry, serial
     """
     other = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, serial)
     if other is not None and other.entry_id != entry.entry_id:
-        _LOGGER.warning(
-            "Another entry (%s) already manages the Cube %s; entry %s keeps its address as identity",
-            other.title,
-            serial,
-            entry.title,
-        )
-        return
+        return  # a second entry for the same Cube; its setup reports it (see async_setup_entry)
     hass.config_entries.async_update_entry(
         entry,
         unique_id=serial,
@@ -135,9 +139,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
     entry.runtime_data = coordinator
 
     cube = coordinator.cube
-    # An entry that could not be migrated yet (no serial number saved) is finished now.
-    if cube.serial and entry.minor_version < CONFIG_ENTRY_MINOR_VERSION:
-        _async_apply_identity(hass, entry, cube.serial)
+    if cube.serial:
+        owner = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, cube.serial)
+        if owner is not None and owner.entry_id != entry.entry_id:
+            # One Cube, two entries would create every device twice. Only the first one runs.
+            raise ConfigEntryError(
+                translation_domain=DOMAIN,
+                translation_key="duplicate_cube",
+                translation_placeholders={"title": owner.title},
+            )
+        # An entry that could not be migrated yet (no serial number saved), or whose identity was
+        # overwritten by an older version of the integration, is put right now.
+        if entry.minor_version < CONFIG_ENTRY_MINOR_VERSION or entry.unique_id != cube.serial:
+            _async_apply_identity(hass, entry, cube.serial)
 
     # Register the Cube itself as the hub device, so the thermostats and
     # contacts group under it and the firmware version is visible.
@@ -153,15 +167,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    # Reload only when the options changed. A new address or identity is saved in the entry's data
-    # and reloaded by whoever saved it (discovery flow, coordinator).
-    options_at_setup = dict(entry.options)
+    # Reload when the options or the address changed (the way Home Assistant wants it: the update
+    # listener schedules the reload). A change of the identity or title does not need one.
+    applied = (dict(entry.options), entry.data[CONF_HOST])
 
-    async def _reload_on_options_change(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:
-        if dict(entry.options) != options_at_setup:
-            await hass.config_entries.async_reload(entry.entry_id)
+    async def _reload_on_change(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:
+        if (dict(entry.options), entry.data[CONF_HOST]) != applied:
+            hass.config_entries.async_schedule_reload(entry.entry_id)
 
-    entry.async_on_unload(entry.add_update_listener(_reload_on_options_change))
+    entry.async_on_unload(entry.add_update_listener(_reload_on_change))
     return True
 
 

@@ -24,20 +24,32 @@ while it pointed at `192.168.0.222`).
 1. **A new entry takes its serial number from the Cube** (config flow: connect, read the serial from the first
    message, `async_set_unique_id(serial)`); `_abort_if_unique_id_configured(updates={host, port})` makes a second
    attempt for a known Cube update the address instead of adding a duplicate.
-2. **Discovery uses the official integration-discovery flow.** After startup the integration broadcasts once
-   (UDP 23272) and starts a flow for every Cube whose data port answers (`discovery_flow.async_create_flow`,
-   source `integration_discovery`). A new Cube appears under *Discovered*; a known Cube gets its new address and
-   the entry is reloaded once (`updates` with reload). A Cube that answers only from an address that cannot be
-   reached (the factory address) is not offered and never saved.
-3. **A changed address is only data.** The coordinator (failed poll, or failed setup) looks the Cube up by serial
-   number, checks that the data port answers, saves `data["host"]` and reloads. Identity and title stay.
+2. **Discovery uses the official discovery flows.**
+   - **DHCP** (`manifest.json`: hardware address prefix `001A22*`, eQ-3): Home Assistant sees the DHCP request of a
+     Cube when it starts or gets a new address and starts the flow. This finds the **first** Cube without any entry
+     and follows a known Cube to its new address. Other eQ-3 devices share the prefix; the flow connects first and
+     ignores everything that does not answer as a Cube.
+   - **Broadcast scan** (UDP 23272) once after startup, for further Cubes and for known ones whose address changed
+     while Home Assistant was off (`integration_discovery`). It only runs while the integration is loaded (there is
+     an entry); a Cube that is set up at the same address is skipped and not contacted.
+   - A new Cube appears under *Discovered*; a known Cube gets its new address saved. A Cube that answers only from
+     an address that cannot be reached (the factory address) is never offered or saved.
+3. **A changed address is only data, and the update listener reloads.** Whoever learns the new address (discovery
+   flow, or the coordinator after a failed poll or failed setup: it looks the Cube up by serial number and checks
+   that the data port answers) saves `data["host"]`; the entry's update listener schedules one reload when the
+   options or the address changed (the pattern Home Assistant asks for; the flows do not reload themselves).
+   Identity and title stay.
 4. **The Cube that answers must be the Cube of the entry.** Every connection compares the serial number in the
    first message with `data["cube_serial"]`. A different Cube at the saved address (an address taken over, a replaced
    Cube) is treated like an unreachable one: the right Cube is searched by serial number, otherwise setup retries.
    The devices of one Cube are never mixed into another Cube's entry.
-5. **The connection test closes the connection** (the Cube accepts one client at a time).
-6. **Reloads:** only changed options reload the entry. A new address or identity is saved in the entry's data and
-   reloaded by whoever saved it (discovery flow or coordinator), so there is exactly one reload.
+5. **One Cube, one entry.** A second entry whose Cube already belongs to another entry stops at setup with the error
+   "already managed by the entry …" (`ConfigEntryError`); it creates no devices. Adding a Cube by hand while a
+   discovery for it is waiting works (`raise_on_progress=False`).
+6. **The connection test closes the connection** (the Cube accepts one client at a time); an unexpected error in
+   the dialog is shown as "unknown" instead of failing the dialog.
+7. **An entry whose unique id was overwritten** (for example by version 1.3.2 after a downgrade) is put right at its
+   next setup: the identity is checked against the serial number of the Cube that answers, not only the minor version.
 
 ## Migration of existing installations
 
@@ -50,10 +62,16 @@ Entries created by 1.0 to 1.3.2 have `version 1, minor_version 1` and the addres
 - If another entry already uses that serial number, the entry keeps its address as identity (and logs it) instead of
   creating a duplicate.
 - An entry of a newer major version is refused (`False`), as Home Assistant requires.
-- **Nothing in the registries changes:** devices and entities were never identified by the address, so the device
-  and entity registry entries, entity ids, areas and customisations stay. This is tested: the sets of entity and device
-  ids before and after the migration are equal.
+- **No registry entry is created, removed or re-keyed:** devices and entities were never identified by the address, so
+  entity ids, areas and device names chosen by the user stay. This is tested: the sets of entity and device ids
+  before and after the migration are equal. (At every setup the integration refreshes the hub's name and firmware
+  and the names of the devices from the Cube's data; names the user chose are kept by Home Assistant.)
 - A downgrade to 1.3.2 keeps working: the entry is still version 1; the older code simply reads the address from its data.
+  1.3.2 writes the address back into the unique id when the Cube gets a new address; the next setup with this version
+  puts it right (rule 7). Adding the Cube again by hand while on 1.3.2 can create a duplicate; that cannot be
+  prevented from here.
+- An entry that cannot be migrated at the first start (no serial number stored and the Cube does not answer) is
+  finished at its next successful setup.
 
 ## Decisions and rejected options
 
@@ -63,6 +81,12 @@ Entries created by 1.0 to 1.3.2 have `version 1, minor_version 1` and the addres
   same change (`data["host"]`), documented in the code.
 - **MAC address as a connection in the device registry:** the Cube does not report its MAC address in the protocol; the
   serial number is the only stable identifier it reports.
+- **A replaced Cube** (new serial number at the old address) is refused (`WrongCubeError`, the entry retries): its
+  devices must not be mixed into the old Cube's entry. Remove the entry and add the new Cube; there is no automatic
+  takeover. (A reconfigure flow with `_abort_if_unique_id_mismatch` comes with 1.4.0.)
+- **UDP broadcast can be spoofed** by another host on the local network. The worst case is a wrong address that is saved
+  and found wrong at the next connection: the serial number in the Cube's first message is compared on every
+  connection (`WrongCubeError`) and the entry looks for the right Cube again. Not worth a second connection per scan.
 - **Reauth:** not applicable, the Cube has no authentication. **Reconfigure** (change the address by hand) is part of the
   1.4.0 work and uses `_abort_if_unique_id_mismatch` so that a wrong Cube is refused.
 - **Repair for an unreachable Cube:** not added; the integration cannot fix it, and unavailable entities and the log line

@@ -4,15 +4,21 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY, SOURCE_USER, ConfigEntryState
+from homeassistant.config_entries import (
+    SOURCE_DHCP,
+    SOURCE_INTEGRATION_DISCOVERY,
+    SOURCE_USER,
+    ConfigEntryState,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.maxcube_local import config_flow
+from custom_components.maxcube_local import async_migrate_entry, config_flow
 from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 
 from .conftest import CUBE_SERIAL, HOST, FakeCube
@@ -111,17 +117,74 @@ async def test_an_entry_of_a_newer_major_version_is_refused(hass: HomeAssistant,
     assert entry.state is ConfigEntryState.MIGRATION_ERROR
 
 
-async def test_two_entries_for_one_cube_do_not_take_over_the_same_identity(
-    hass: HomeAssistant, cube: FakeCube
-) -> None:
+async def test_a_second_entry_for_the_same_cube_does_not_run(hass: HomeAssistant, cube: FakeCube) -> None:
+    """One Cube under two entries would create every device twice."""
     first = _modern()
-    first.add_to_hass(hass)
+    await _setup(hass, first)
     second = _legacy()
     second.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(second.entry_id)
+    assert not await hass.config_entries.async_setup(second.entry_id)
+    assert second.state is ConfigEntryState.SETUP_ERROR
+    assert first.state is ConfigEntryState.LOADED
+    assert dr.async_entries_for_config_entry(dr.async_get(hass), second.entry_id) == []
+    assert second.unique_id == HOST  # not taken over; the first entry owns the serial number
+
+
+async def test_a_legacy_entry_is_migrated_even_while_the_cube_is_offline(hass: HomeAssistant) -> None:
+    """The live case of 2026-11-20: the Cube did not answer, the entry was in retry."""
+    entry = _legacy()
+    entry.add_to_hass(hass)
+    with (
+        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", side_effect=OSError("timed out")),
+        patch(COORD_DISCOVER, return_value=[]),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert (entry.unique_id, entry.title, entry.minor_version) == (CUBE_SERIAL, TITLE, 2)
+
+
+async def test_an_entry_without_a_serial_is_finished_when_the_cube_answers_later(
+    hass: HomeAssistant, cube: FakeCube
+) -> None:
+    entry = _legacy(with_serial=False)
+    entry.add_to_hass(hass)
+    attempts = []
+
+    def build(host: str, port: int, *args: object, **kwargs: object) -> FakeCube:
+        attempts.append(host)
+        if len(attempts) == 1:
+            raise OSError("timed out")
+        return cube
+
+    with (
+        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", build),
+        patch(COORD_DISCOVER, return_value=[]),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        assert (entry.unique_id, entry.minor_version) == (HOST, 1)  # nothing to migrate to yet
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert (entry.unique_id, entry.minor_version) == (CUBE_SERIAL, 2)
+
+
+async def test_an_identity_overwritten_by_an_older_version_is_put_right(hass: HomeAssistant, cube: FakeCube) -> None:
+    """Version 1.3.2 wrote the address back into the unique id after a downgrade and a new address."""
+    entry = _modern()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, unique_id=NEW_HOST)
+    assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert first.unique_id == CUBE_SERIAL
-    assert second.unique_id == HOST  # keeps its address as identity instead of duplicating the serial
+    assert (entry.unique_id, entry.minor_version) == (CUBE_SERIAL, 2)
+
+
+async def test_migrating_twice_changes_nothing_more(hass: HomeAssistant) -> None:
+    entry = _legacy()
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry)
+    first = (entry.unique_id, entry.title, entry.minor_version, dict(entry.data))
+    assert await async_migrate_entry(hass, entry)
+    assert (entry.unique_id, entry.title, entry.minor_version, dict(entry.data)) == first
 
 
 # ------------------------------------------------------------------ the address changes, the identity does not
@@ -306,14 +369,105 @@ async def test_the_scan_after_startup_starts_a_flow_for_a_reachable_cube(hass: H
 # ------------------------------------------------------------------ reloads
 
 
-async def test_only_changed_options_reload_the_entry(hass: HomeAssistant, cube: FakeCube) -> None:
+async def test_a_changed_address_or_changed_options_reload_the_entry_once(hass: HomeAssistant, cube: FakeCube) -> None:
     entry = _modern()
     await _setup(hass, entry)
     first = entry.runtime_data
+    hass.config_entries.async_update_entry(entry, title="Heizung")  # a title is not a reason to reload
+    await hass.async_block_till_done()
+    assert entry.runtime_data is first
+
     hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_HOST: NEW_HOST})
     await hass.async_block_till_done()
-    assert entry.runtime_data is first  # a changed address alone does not reload
+    second = entry.runtime_data
+    assert second is not first and entry.state is ConfigEntryState.LOADED
 
     hass.config_entries.async_update_entry(entry, options={"scan_interval": 120})
     await hass.async_block_till_done()
-    assert entry.runtime_data is not first
+    assert entry.runtime_data is not second
+
+
+async def test_a_waiting_discovery_does_not_block_adding_the_cube_by_hand(hass: HomeAssistant, cube: FakeCube) -> None:
+    await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_INTEGRATION_DISCOVERY},
+        data={CONF_HOST: HOST, CONF_CUBE_SERIAL: CUBE_SERIAL},
+    )
+    with patch(FLOW_DISCOVER, return_value=[]), patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_HOST: HOST, CONF_PORT: 62910})
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert hass.config_entries.flow.async_progress_by_handler(DOMAIN) == []
+
+
+async def test_adding_a_cube_by_hand_updates_the_address_of_an_old_entry(hass: HomeAssistant) -> None:
+    legacy = _legacy()
+    legacy.add_to_hass(hass)
+    with patch(FLOW_DISCOVER, return_value=[]), patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_HOST: NEW_HOST, CONF_PORT: 62910})
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
+    assert legacy.data[CONF_HOST] == NEW_HOST
+
+
+async def test_an_unexpected_error_is_shown_as_unknown(hass: HomeAssistant) -> None:
+    with patch(FLOW_DISCOVER, return_value=[]), patch(CONNECT, side_effect=ValueError("garbled")):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_HOST: HOST, CONF_PORT: 62910})
+    assert result["errors"] == {"base": "unknown"}
+
+
+# ------------------------------------------------------------------ DHCP discovery (the first Cube, and a new address)
+
+
+def _dhcp(ip: str) -> DhcpServiceInfo:
+    return DhcpServiceInfo(ip=ip, hostname="max", macaddress="001a220230c2")
+
+
+async def test_dhcp_offers_a_new_cube(hass: HomeAssistant) -> None:
+    with patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_DHCP}, data=_dhcp(HOST))
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "discovery_confirm"
+    assert result["description_placeholders"] == {"serial": CUBE_SERIAL, "host": HOST}
+
+
+async def test_dhcp_ignores_another_eq3_device(hass: HomeAssistant) -> None:
+    with patch(CONNECT, side_effect=OSError("refused")):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_DHCP}, data=_dhcp(HOST))
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "cannot_connect"
+
+
+async def test_dhcp_follows_a_cube_to_its_new_address(hass: HomeAssistant, cube: FakeCube) -> None:
+    entry = _modern()
+    await _setup(hass, entry)
+    with patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_DHCP}, data=_dhcp(NEW_HOST))
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == NEW_HOST and entry.state is ConfigEntryState.LOADED
+
+
+async def test_an_entry_without_a_serial_is_matched_by_its_address_but_left_unchanged(hass: HomeAssistant) -> None:
+    """Another Cube could have taken the address; the migration decides at the next setup."""
+    legacy = _legacy(with_serial=False)
+    legacy.add_to_hass(hass)
+    with patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_DHCP}, data=_dhcp(HOST))
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
+    assert CONF_CUBE_SERIAL not in legacy.data and legacy.unique_id == HOST
+
+
+async def test_the_scan_does_not_touch_a_cube_that_is_set_up_at_the_same_address(hass: HomeAssistant, cube: FakeCube) -> None:
+    from homeassistant.setup import async_setup_component
+
+    _modern().add_to_hass(hass)
+    found = [{"host": HOST, "serial": CUBE_SERIAL}, {"host": "192.168.10.77", "serial": "KEQ0999999"}]
+    reachable = MagicMock(return_value=True)
+    with (
+        patch("custom_components.maxcube_local.discover_cubes", return_value=found),
+        patch("custom_components.maxcube_local.is_reachable", reachable),
+    ):
+        assert await async_setup_component(hass, DOMAIN, {})
+        await hass.async_block_till_done()
+    assert [call.args[0] for call in reachable.call_args_list] == ["192.168.10.77"]
