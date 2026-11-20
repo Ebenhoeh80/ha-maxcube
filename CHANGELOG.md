@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-11-20
+
+### Changed
+- **Writing the weekly programme: the read-back is checked again later.** On a real Cube the new
+  programme shows up in the Cube's data only after the thermostat has taken it, about two minutes
+  after the write. The service now reports `sent_not_confirmed` right away in that case (instead of
+  suggesting a failure), checks again five minutes later and logs a warning if the Cube still shows
+  the old programme. The README explains the delay.
+
 ## [1.3.0] - 2026-11-20
 
 ### Added

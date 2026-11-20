@@ -16,9 +16,10 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import CONF_CUBE_SERIAL, DOMAIN, REDISCOVER_COOLDOWN
+from .const import CONF_CUBE_SERIAL, DOMAIN, REDISCOVER_COOLDOWN, SCHEDULE_VERIFY_DELAY
 from .cube import MaxCubeWithStatus
 from .discovery import discover_cubes, find_host
 
@@ -110,7 +111,10 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         """Write the programme of the given days and check, by reading it back, what arrived.
 
         Returns ``{day: "confirmed" | "sent_not_confirmed" | "failed"}``. ``confirmed`` means the
-        Cube now reports exactly the requested programme.
+        Cube already reports exactly the requested programme. ``sent_not_confirmed`` means the Cube
+        took the message but still shows the old programme: it updates its copy only after the
+        thermostat has taken the change (about two minutes), so these days are checked again later
+        and a warning is logged if they still differ.
         """
         async with self._write_lock:
             sent = await self.hass.async_add_executor_job(self._send_days, device, days)
@@ -122,7 +126,32 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 results[day] = "confirmed"
             else:
                 results[day] = "sent_not_confirmed" if sent[day] else "failed"
+        pending = {day: days[day] for day, result in results.items() if result == "sent_not_confirmed"}
+        if pending:
+            self.config_entry.async_on_unload(
+                async_call_later(
+                    self.hass,
+                    SCHEDULE_VERIFY_DELAY,
+                    lambda _now: self.hass.async_create_task(
+                        self._async_verify_schedule(device, pending)
+                    ),
+                )
+            )
         return results
+
+    async def _async_verify_schedule(self, device, days: dict[str, list[dict]]) -> None:
+        """Check again, a few minutes after a write, whether the Cube shows the new programme."""
+        await self.async_refresh()
+        stored = getattr(device, "schedule", None) or {}
+        differing = [day for day, slots in days.items() if stored.get(day) != slots]
+        if differing:
+            _LOGGER.warning(
+                "The Cube still shows the old weekly programme of %s for %s, %d s after it was sent. "
+                "The thermostat may not have taken it (check its batteries and its range to the Cube)",
+                getattr(device, "name", device.rf_address),
+                ", ".join(differing),
+                SCHEDULE_VERIFY_DELAY,
+            )
 
     async def async_reconnect(self) -> None:
         """Close the connection and read everything from the Cube again."""

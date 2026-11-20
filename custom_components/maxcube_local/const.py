@@ -15,6 +15,9 @@ CONF_CUBE_SERIAL = "cube_serial"
 SERVICE_RECONNECT = "reconnect"
 # A programme is not written when the Cube has already used this share of its radio time.
 MAX_DUTY_CYCLE_FOR_WRITING = 90  # percent
+# The Cube shows a new programme only after the thermostat has taken it (about two minutes in
+# practice), so a write is checked again after this long.
+SCHEDULE_VERIFY_DELAY = 300  # seconds
 # After a failed poll the integration looks for the Cube under a new IP address, at most this often.
 REDISCOVER_COOLDOWN = 300  # seconds
 
