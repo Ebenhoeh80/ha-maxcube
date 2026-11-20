@@ -294,7 +294,7 @@ def _entry_with_serial() -> MockConfigEntry:
 def _factory(cube: FakeCube, calls: list[str]):
     """A Cube class that does not answer at the saved address, but at any other."""
 
-    def build(host: str, port: int, *args: object) -> FakeCube:
+    def build(host: str, port: int, *args: object, **kwargs: object) -> FakeCube:
         calls.append(host)
         if host == HOST:
             raise OSError("timed out")
@@ -311,7 +311,7 @@ async def test_setup_finds_the_cube_again_when_the_saved_address_does_not_answer
     entry.add_to_hass(hass)
     calls: list[str] = []
     with (
-        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", _factory(cube, calls)),
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", _factory(cube, calls)),
         patch(
             "custom_components.maxcube_local.coordinator.discover_cubes",
             return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}],
@@ -333,7 +333,7 @@ async def test_an_address_that_cannot_be_reached_is_never_saved(
     entry.add_to_hass(hass)
     calls: list[str] = []
     with (
-        patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", _factory(cube, calls)),
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", _factory(cube, calls)),
         patch(
             "custom_components.maxcube_local.coordinator.discover_cubes",
             return_value=[{"host": FACTORY_ADDRESS, "serial": CUBE_SERIAL}],

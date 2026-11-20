@@ -66,3 +66,14 @@ class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):
             suggested_area=suggested_area,
             **_hub_link(coordinator, cube_serial),
         )
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available.
+
+        The device's own RF state does not affect availability: a device with a
+        radio fault must stay visible, otherwise the diagnostic sensors could
+        never report it.  Only a failed Cube connection takes entities offline,
+        which is what ``super().available`` already reports.
+        """
+        return super().available

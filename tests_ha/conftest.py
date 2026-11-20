@@ -7,6 +7,7 @@ a fake that behaves like the library's ``MaxCube``: no network, but real device 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import patch
 
@@ -25,6 +26,7 @@ from maxcube.windowshutter import MaxWindowShutter
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import DOMAIN
+from custom_components.maxcube_local.linkstatus import DeviceStatus
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -132,6 +134,7 @@ class FakeCube:
         self.updates = 0
         self.disconnects = 0
         self.fail_updates = 0
+        self.errors: dict[str, bool] = {}
         self.accept_writes = True
         self.written: list[tuple[str, str, list[dict[str, Any]]]] = []
 
@@ -143,6 +146,17 @@ class FakeCube:
 
     def disconnect(self) -> None:
         self.disconnects += 1
+
+    def device_status(self, rf_address: str, stale_after: float) -> DeviceStatus:
+        """Report every device as healthy and recently heard."""
+        return DeviceStatus(
+            initialized=True,
+            error=self.errors.get(rf_address, False),
+            link_error=False,
+            last_heard=datetime.now(UTC),
+            stale=False,
+            raw_flags="0200",
+        )
 
     def room_by_id(self, room_id: int | None) -> MaxRoom | None:
         return next((room for room in self.rooms if room.id == room_id), None)
@@ -169,7 +183,7 @@ class FakeCube:
 def cube() -> Iterator[FakeCube]:
     """Patch the integration's cube class with a fake and return the fake."""
     fake = FakeCube()
-    with patch("custom_components.maxcube_local.coordinator.MaxCubeWithStatus", lambda *a: fake):
+    with patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", lambda *a, **k: fake):
         yield fake
 
 
