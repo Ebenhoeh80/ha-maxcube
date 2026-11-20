@@ -13,6 +13,7 @@ import base64
 import binascii
 
 from maxcube.cube import MaxCube
+from maxcube.thermostat import MaxThermostat
 
 from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
 
@@ -43,7 +44,9 @@ class MaxCubeWithStatus(MaxCube):
     duty_cycle: int | None = None
     free_memory_slots: int | None = None
 
-    def write_day_schedule(self, thermostat, day: str, slots: list[dict]) -> bool:
+    def write_day_schedule(
+        self, thermostat: MaxThermostat, day: str, slots: list[dict]
+    ) -> bool:
         """Send the programme of one day to a radiator thermostat; True if the Cube took it.
 
         ``slots`` is ``[{"until": "HH:MM", "temp": 21.0}, ...]`` (see ``validate_periods``). The

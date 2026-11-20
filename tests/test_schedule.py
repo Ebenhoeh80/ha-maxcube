@@ -31,7 +31,7 @@ def _week(day_slots: dict[str, list[tuple[float, str]]]) -> bytes:
 
 
 def test_the_week_starts_with_saturday_in_the_data_but_monday_in_the_result() -> None:
-    week = {day: TYPICAL for day in schedule.WEEK_DAYS}
+    week = dict.fromkeys(schedule.WEEK_DAYS, TYPICAL)
     week["saturday"] = [(19.0, "24:00")]
     decoded = schedule.parse_week_program(_week(week))
     assert list(decoded) == list(schedule.WEEK_DAYS)
@@ -40,7 +40,7 @@ def test_the_week_starts_with_saturday_in_the_data_but_monday_in_the_result() ->
 
 
 def test_half_degrees_are_kept_where_the_library_cuts_them() -> None:
-    data = _week({day: TYPICAL for day in schedule.WEEK_DAYS})
+    data = _week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL))
     ours = schedule.parse_week_program(data)["monday"]
     theirs = get_programme(data)["monday"]
     assert {"until": "22:00", "temp": 21.5} in ours
@@ -49,7 +49,7 @@ def test_half_degrees_are_kept_where_the_library_cuts_them() -> None:
 
 def test_whole_degrees_agree_with_the_library() -> None:
     whole = [(17.0, "06:00"), (21.0, "18:00"), (17.0, "24:00")]
-    data = _week({day: whole for day in schedule.WEEK_DAYS})
+    data = _week(dict.fromkeys(schedule.WEEK_DAYS, whole))
     ours = schedule.parse_week_program(data)
     theirs = get_programme(data)
     for day in schedule.WEEK_DAYS:
@@ -57,7 +57,7 @@ def test_whole_degrees_agree_with_the_library() -> None:
 
 
 def test_unused_setpoints_after_the_end_of_the_day_are_ignored() -> None:
-    data = _week({day: TYPICAL for day in schedule.WEEK_DAYS})
+    data = _week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL))
     assert len(schedule.parse_week_program(data)["tuesday"]) == len(TYPICAL)
 
 
@@ -68,7 +68,7 @@ def test_short_data_leaves_out_the_missing_days() -> None:
 
 
 def test_the_scheduled_temperature_follows_the_clock() -> None:
-    decoded = schedule.parse_week_program(_week({day: TYPICAL for day in schedule.WEEK_DAYS}))
+    decoded = schedule.parse_week_program(_week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL)))
     monday = datetime(2026, 11, 16)  # a Monday
     assert monday.weekday() == 0
     at = lambda hour, minute: schedule.scheduled_temperature(  # noqa: E731
@@ -93,7 +93,7 @@ def test_a_c_message_sets_the_schedule_and_keeps_the_library_fields() -> None:
     cube = object.__new__(cube_module.MaxCubeWithStatus)
     cube.devices = [thermostat]
     settings = bytes(18) + bytes([41, 33, 61, 9]) + bytes(7)  # comfort 20.5, eco 16.5, max, min
-    data = settings + _week({day: TYPICAL for day in schedule.WEEK_DAYS})
+    data = settings + _week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL))
     assert len(settings) == schedule.PROGRAMME_OFFSET
     cube.parse_c_message("0A1B2C," + base64.b64encode(data).decode())
 

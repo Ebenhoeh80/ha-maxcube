@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from maxcube.cube import MaxCube
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
+from maxcube.cube import MaxCube
 
 from .const import (
     CONF_SCAN_INTERVAL,

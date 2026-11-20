@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from maxcube.device import MaxDevice
-
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -13,11 +11,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from maxcube.device import MaxDevice
 
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity, async_add_devices_as_they_appear
-
 
 # read-only: the coordinator does the polling
 PARALLEL_UPDATES = 0

@@ -302,7 +302,9 @@ async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
 async def test_the_diagnostics_hide_addresses_and_names(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    from custom_components.maxcube_local.diagnostics import async_get_config_entry_diagnostics
+    from custom_components.maxcube_local.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
 
     await _setup(hass, config_entry)
     data = await async_get_config_entry_diagnostics(hass, config_entry)

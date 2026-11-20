@@ -19,9 +19,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
+from maxcube.device import MaxDevice
 
 from .const import CONF_CUBE_SERIAL, DOMAIN, REDISCOVER_COOLDOWN, SCHEDULE_VERIFY_DELAY
-from .cube import MaxCubeWithStatus
 from .discovery import discover_cubes, find_host
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
 
@@ -62,7 +62,14 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         self.scan_interval = scan_interval
         # Three missed polls before a device is considered stale.
         self.stale_after = max(3 * scan_interval, MIN_STALE_AFTER)
-        self.cube: LinkStatusMaxCube | None = None
+        self._cube: LinkStatusMaxCube | None = None
+
+    @property
+    def cube(self) -> LinkStatusMaxCube:
+        """Return the Cube; it exists as soon as the first refresh has succeeded."""
+        if self._cube is None:
+            raise RuntimeError("The MAX! Cube is not connected yet")
+        return self._cube
 
     def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
@@ -74,15 +81,15 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
 
     async def _async_setup(self) -> None:
         """Open the connection once before the first refresh."""
-        self.cube = await self.hass.async_add_executor_job(self._connect)
+        self._cube = await self.hass.async_add_executor_job(self._connect)
 
     async def _async_update_data(self) -> None:
         """Refresh all device states from the Cube."""
-        if self.cube is None:
-            self.cube = await self.hass.async_add_executor_job(self._connect)
+        if self._cube is None:
+            self._cube = await self.hass.async_add_executor_job(self._connect)
             return
         try:
-            await self.hass.async_add_executor_job(self.cube.update)
+            await self.hass.async_add_executor_job(self._cube.update)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
@@ -112,11 +119,13 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         )
         return True
 
-    def _send_days(self, device, days: dict[str, list[dict]]) -> dict[str, bool]:
+    def _send_days(self, device: MaxDevice, days: dict[str, list[dict]]) -> dict[str, bool]:
         """Send the programme of each day (blocking, runs in the executor)."""
         return {day: self.cube.write_day_schedule(device, day, slots) for day, slots in days.items()}
 
-    async def async_write_schedule(self, device, days: dict[str, list[dict]]) -> dict[str, str]:
+    async def async_write_schedule(
+        self, device: MaxDevice, days: dict[str, list[dict]]
+    ) -> dict[str, str]:
         """Write the programme of the given days and check, by reading it back, what arrived.
 
         Returns ``{day: "confirmed" | "sent_not_confirmed" | "failed"}``. ``confirmed`` means the
@@ -148,7 +157,9 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             )
         return results
 
-    async def _async_verify_schedule(self, device, days: dict[str, list[dict]]) -> None:
+    async def _async_verify_schedule(
+        self, device: MaxDevice, days: dict[str, list[dict]]
+    ) -> None:
         """Check again, a few minutes after a write, whether the Cube shows the new programme."""
         await self.async_refresh()
         stored = getattr(device, "schedule", None) or {}
@@ -164,8 +175,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
 
     async def async_reconnect(self) -> None:
         """Close the connection and read everything from the Cube again."""
-        if self.cube is not None:
-            await self.hass.async_add_executor_job(self.cube.disconnect)
+        if self._cube is not None:
+            await self.hass.async_add_executor_job(self._cube.disconnect)
         await self.async_request_refresh()
 
     def device_status(self, rf_address: str) -> DeviceStatus:
@@ -174,8 +185,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         Falls back to an all-unknown, stale status while the Cube object has not
         been built yet, so entities can always read a well-formed value.
         """
-        if self.cube is None:
+        if self._cube is None:
             return DeviceStatus(
                 initialized=None, error=None, link_error=None, last_heard=None, stale=True
             )
-        return self.cube.device_status(rf_address, self.stale_after)
+        return self._cube.device_status(rf_address, self.stale_after)

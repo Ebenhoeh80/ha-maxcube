@@ -5,14 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-from maxcube.device import (
-    MAX_DEVICE_MODE_AUTOMATIC,
-    MAX_DEVICE_MODE_BOOST,
-    MAX_DEVICE_MODE_MANUAL,
-    MAX_DEVICE_MODE_VACATION,
-    MaxDevice,
-)
-
 from homeassistant.components.climate import (
     PRESET_AWAY,
     PRESET_BOOST,
@@ -36,6 +28,13 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
+from maxcube.device import (
+    MAX_DEVICE_MODE_AUTOMATIC,
+    MAX_DEVICE_MODE_BOOST,
+    MAX_DEVICE_MODE_MANUAL,
+    MAX_DEVICE_MODE_VACATION,
+    MaxDevice,
+)
 
 from .const import DOMAIN, MAX_DUTY_CYCLE_FOR_WRITING
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
@@ -215,7 +214,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             ) from err
         days = list(dict.fromkeys(days))  # each day once, in the order given
         if dry_run:
-            return {"dry_run": True, "would_write": {day: slots for day in days}}
+            return {"dry_run": True, "would_write": dict.fromkeys(days, slots)}
         duty = getattr(self.coordinator.cube, "duty_cycle", None)
         if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
             raise ServiceValidationError(
@@ -224,7 +223,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
                 translation_placeholders={"duty": str(duty)},
             )
         results = await self.coordinator.async_write_schedule(
-            self._device, {day: slots for day in days}
+            self._device, dict.fromkeys(days, slots)
         )
         failed = [day for day, result in results.items() if result == "failed"]
         if failed:

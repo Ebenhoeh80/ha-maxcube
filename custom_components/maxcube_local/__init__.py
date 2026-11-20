@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
-
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
@@ -107,7 +106,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
 def _current_identifiers(entry: MaxCubeConfigEntry) -> set[str] | None:
     """Return the addresses of the Cube and all its devices, or ``None`` if the list is not trustworthy."""
     cube = entry.runtime_data.cube
-    if cube is None or not cube.devices:
+    if not cube.devices:
         # An empty list is more likely a failed read than a Cube without any device.
         return None
     current = {device.rf_address for device in cube.devices}

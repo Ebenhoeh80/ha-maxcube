@@ -5,18 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from maxcube.device import MaxDevice
-
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from maxcube.device import MaxDevice
 
 from .const import DEVICE_TYPE_NAMES, DOMAIN, MANUFACTURER
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
-
 
 # Home Assistant 2026.11 links a device to its hub by registry id (``via_device_id``)
 # and deprecates ``via_device`` (removed in 2027.8). Older versions only know
@@ -57,8 +55,6 @@ def async_add_devices_as_they_appear(
     @callback
     def _add_new() -> None:
         cube = coordinator.cube
-        if cube is None:
-            return
         new = [device for device in cube.devices if device.rf_address not in known]
         if not new:
             return

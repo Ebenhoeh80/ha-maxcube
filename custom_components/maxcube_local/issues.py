@@ -7,7 +7,7 @@ from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry
-from .health import ISSUE_BATTERY, ISSUE_ERROR, find_problems
+from .health import find_problems
 
 
 def _issue_id(entry: MaxCubeConfigEntry, kind: str, rf_address: str) -> str:
@@ -23,8 +23,6 @@ def async_setup_issues(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:
     @callback
     def _update() -> None:
         cube = coordinator.cube
-        if cube is None:
-            return
         current: dict[str, tuple[str, str]] = {}
         for finding in find_problems(cube.devices, coordinator.device_status):
             current[_issue_id(entry, finding.kind, finding.rf_address)] = (
