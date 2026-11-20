@@ -102,6 +102,8 @@ class MaxCubeRebootButton(ButtonEntity):
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             sock.sendto(payload, (CUBE_BROADCAST, CUBE_CONTROL_PORT))
+        except OSError as err:
+            _LOGGER.warning("Could not send the reboot request to the MAX! Cube: %s", err)
         finally:
             sock.close()
 

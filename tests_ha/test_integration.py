@@ -392,3 +392,120 @@ async def test_the_poll_interval_can_be_changed_in_the_options(
     )
     assert result["type"] == "create_entry"
     assert config_entry.options["scan_interval"] == 120
+
+
+
+async def _climate_call(hass: HomeAssistant, service: str, entity_id: str, **data: object) -> None:
+    await hass.services.async_call(
+        "climate", service, {"entity_id": entity_id, **data}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+
+async def test_the_hvac_modes_and_presets_are_written_to_the_cube(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from maxcube.device import (
+        MAX_DEVICE_MODE_AUTOMATIC,
+        MAX_DEVICE_MODE_BOOST,
+        MAX_DEVICE_MODE_MANUAL,
+        MAX_DEVICE_MODE_VACATION,
+    )
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    device = cube.devices[0]
+
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="off")
+    assert device.target_temperature == 4.5
+
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="heat")
+    assert device.target_temperature >= 5.0
+
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="auto")
+    assert device.mode == MAX_DEVICE_MODE_AUTOMATIC
+
+    for preset, expected_mode in (
+        ("boost", MAX_DEVICE_MODE_BOOST),
+        ("away", MAX_DEVICE_MODE_VACATION),
+        ("none", MAX_DEVICE_MODE_AUTOMATIC),
+    ):
+        await _climate_call(hass, "set_preset_mode", entity_id, preset_mode=preset)
+        assert device.mode == expected_mode
+
+    device.mode = MAX_DEVICE_MODE_MANUAL
+    await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="comfort")
+    assert device.target_temperature == device.comfort_temperature
+    await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="eco")
+    assert device.target_temperature == device.eco_temperature
+    await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="on")
+    assert device.target_temperature == 30.5
+    await _climate_call(hass, "set_temperature", entity_id, temperature=19.5)
+    assert device.target_temperature == 19.5
+
+
+async def test_the_climate_state_reflects_mode_valve_and_preset(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from maxcube.device import MAX_DEVICE_MODE_BOOST, MAX_DEVICE_MODE_MANUAL
+
+    device = cube.devices[0]
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    coordinator = config_entry.runtime_data
+
+    async def state():
+        coordinator.async_set_updated_data(None)
+        await hass.async_block_till_done()
+        return hass.states.get(entity_id)
+
+    device.valve_position = 40
+    assert (await state()).attributes["hvac_action"] == "heating"
+    device.valve_position = 0
+    assert (await state()).attributes["hvac_action"] == "idle"
+    device.target_temperature = 4.5
+    assert (await state()).attributes["hvac_action"] == "off"
+    device.target_temperature, device.mode = 30.5, MAX_DEVICE_MODE_MANUAL
+    assert (await state()).attributes["preset_mode"] == "on"
+    device.target_temperature = device.eco_temperature
+    assert (await state()).attributes["preset_mode"] == "eco"
+    device.target_temperature = 20.0
+    assert (await state()).attributes["preset_mode"] == "none"
+    device.mode = MAX_DEVICE_MODE_BOOST
+    assert (await state()).attributes["preset_mode"] == "boost"
+
+
+async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.button import MaxCubeRebootButton
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "button", f"{CUBE_SERIAL}_reboot")
+    er.async_get(hass).async_update_entity(entity_id, disabled_by=None)
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
+    sent = sock.return_value.sendto.call_args.args[0]
+    assert sent == b"eQ3Max*\x00" + CUBE_SERIAL.encode() + b"R"
+
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        sock.return_value.sendto.side_effect = OSError("unreachable")
+        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
+    assert sock.return_value.close.called
+
+
+async def test_a_serial_of_the_wrong_length_is_not_sent(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.button import MaxCubeRebootButton
+
+    await _setup(hass, config_entry)
+    button = MaxCubeRebootButton(config_entry.runtime_data)
+    button.hass = hass
+    button._serial = "SHORT"
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        await button.async_press()
+    assert not sock.called
