@@ -72,6 +72,8 @@ BIT_LINK_ERROR = 1 << 6
 # The library never flags a submessage shorter than this as malformed; it just
 # indexes into it.  Six bytes are the minimum that carries both flag bytes.
 MIN_SUBMESSAGE_LENGTH = 6
+# An entry needs at least its length byte and the three bytes of the radio address.
+_MIN_ENTRY_LENGTH = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +130,7 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
         pos = 0
         while pos < len(data):
             length = data[pos]
-            if length < 4 or pos + length >= len(data):
+            if length < _MIN_ENTRY_LENGTH or pos + length >= len(data):
                 break
             rf_address = self.parse_rf_address(data[pos + 1 : pos + 4])
             self.last_heard[rf_address] = stamp

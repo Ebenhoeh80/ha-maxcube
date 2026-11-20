@@ -19,6 +19,7 @@ from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
 
 _DUTY_CYCLE_FIELD = 5
 _FREE_SLOTS_FIELD = 6
+_MAX_DUTY_CYCLE = 100  # percent
 
 
 def _hex_field(tokens: list[str], index: int) -> int | None:
@@ -33,7 +34,7 @@ def parse_h_status(message: str) -> tuple[int | None, int | None]:
     """Return ``(duty_cycle_percent, free_memory_slots)`` from the argument of an H message."""
     tokens = message.strip().split(",")
     duty = _hex_field(tokens, _DUTY_CYCLE_FIELD)
-    if duty is not None and not 0 <= duty <= 100:
+    if duty is not None and not 0 <= duty <= _MAX_DUTY_CYCLE:
         duty = None
     return duty, _hex_field(tokens, _FREE_SLOTS_FIELD)
 

@@ -24,6 +24,7 @@ PROGRAMME_OFFSET = 29  # where the weekly programme starts in the decoded C mess
 BLOCK_BYTES = 26
 SLOTS_PER_DAY = 13
 END_OF_DAY_MINUTES = 24 * 60
+_MINUTE_DIGITS = 2
 
 Schedule = dict[str, list[dict[str, Any]]]
 
@@ -122,7 +123,7 @@ def _minutes_of(until: str) -> int:
     try:
         minutes = parse_time(until)
         hours_part, minutes_part = until.split(":")
-        valid_shape = len(hours_part) in (1, 2) and len(minutes_part) == 2
+        valid_shape = len(hours_part) in (1, 2) and len(minutes_part) == _MINUTE_DIGITS
     except (ValueError, KeyError):
         raise ScheduleError("bad_time", until) from None
     if not valid_shape or not 0 < minutes <= END_OF_DAY_MINUTES:
@@ -130,7 +131,7 @@ def _minutes_of(until: str) -> int:
     return minutes
 
 
-def _checked_temperature(value: Any) -> float:
+def _checked_temperature(value: float | str) -> float:
     """Return the temperature if it is a half degree within the range the thermostat accepts."""
     temp = float(value)
     if not MIN_TEMPERATURE <= temp <= MAX_TEMPERATURE or (temp * 2) % 1:

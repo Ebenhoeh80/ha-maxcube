@@ -149,12 +149,12 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 ) from err
             raise UpdateFailed(f"Error communicating with MAX! Cube: {err}") from err
 
-    async def _async_locked_call(self, func: Callable[..., T], *args: Any) -> T:
+    async def _async_locked_call(self, func: Callable[..., T], *args: object) -> T:
         """Run a blocking Cube call in the executor, one call at a time (errors pass through)."""
         async with self._io_lock:
             return await self.hass.async_add_executor_job(func, *args)
 
-    async def async_cube_call(self, func: Callable[..., T], *args: Any) -> T:
+    async def async_cube_call(self, func: Callable[..., T], *args: object) -> T:
         """Run a blocking Cube call for a user action, one call at a time.
 
         Polls, commands and programme writes would otherwise run in different threads on the same
@@ -171,7 +171,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
                 translation_placeholders={"error": str(err) or type(err).__name__},
             ) from err
 
-    async def async_cube_command(self, func: Callable[..., Any], *args: Any) -> None:
+    async def async_cube_command(self, func: Callable[..., Any], *args: object) -> None:
         """Send a command to the Cube and raise if it does not accept it (returns a false value)."""
         if not await self.async_cube_call(func, *args):
             raise HomeAssistantError(

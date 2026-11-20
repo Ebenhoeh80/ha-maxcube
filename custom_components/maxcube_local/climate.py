@@ -308,7 +308,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             return PRESET_ECO
         return PRESET_NONE
 
-    async def async_set_temperature(self, **kwargs: Any) -> None:
+    async def async_set_temperature(self, **kwargs: Any) -> None:  # noqa: ANN401
         """Set a new target temperature."""
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is not None:
