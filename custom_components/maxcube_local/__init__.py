@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from homeassistant.const import CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+import voluptuous as vol
 
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, MANUFACTURER
+from homeassistant.const import CONF_HOST, CONF_PORT, Platform
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.typing import ConfigType
+
+from .const import (
+    CONF_CUBE_SERIAL,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MANUFACTURER,
+    SERVICE_RECONNECT,
+)
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -14,6 +25,33 @@ PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
     Platform.SENSOR,
 ]
+
+
+_RECONNECT_SCHEMA = vol.Schema({vol.Optional("entry_id"): str})
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration-wide service."""
+
+    async def _handle_reconnect(call: ServiceCall) -> None:
+        """Close the connection to the Cube and read everything again."""
+        wanted = call.data.get("entry_id")
+        entries = [
+            entry
+            for entry in hass.config_entries.async_loaded_entries(DOMAIN)
+            if wanted in (None, entry.entry_id)
+        ]
+        if not entries:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="no_cube_configured"
+            )
+        for entry in entries:
+            await entry.runtime_data.async_reconnect()
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_RECONNECT, _handle_reconnect, schema=_RECONNECT_SCHEMA
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> bool:
@@ -28,9 +66,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
+    cube = coordinator.cube
+    # Remember the Cube's serial number: it identifies the Cube if its IP address changes.
+    # (Saved before the update listener below is registered, so this does not reload the entry.)
+    if cube.serial and entry.data.get(CONF_CUBE_SERIAL) != cube.serial:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_CUBE_SERIAL: cube.serial}
+        )
+
     # Register the Cube itself as the hub device, so the thermostats and
     # contacts group under it and the firmware version is visible.
-    cube = coordinator.cube
     if cube.serial:
         dr.async_get(hass).async_get_or_create(
             config_entry_id=entry.entry_id,

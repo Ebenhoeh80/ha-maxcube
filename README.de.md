@@ -30,6 +30,12 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
   - Komfort-/Eco-Sollwerte und Ventilstellung als Zusatz-Attribute.
 - **Sensoren**: gemessene Temperatur je Thermostat und Ventilöffnung (%) je
   Heizkörperthermostat.
+- **Cube-Diagnose**: die **Funkauslastung** (%) und die Zahl der **freien Speicherplätze**, bei jeder
+  Abfrage gelesen. Der Cube darf nur einen begrenzten Teil der Funkzeit nutzen; bei 100 % sendet er etwa
+  eine Stunde lang keine Funkbefehle, achte darauf besonders beim Ändern vieler Einstellungen.
+- **Findet den Cube nach einem IP-Wechsel** (DHCP) wieder: Er wird über die Seriennummer gesucht, die neue
+  Adresse wird automatisch gespeichert.
+- **Dienst `maxcube_local.reconnect`** trennt die Verbindung zum Cube und liest alles erneut aus.
 - **Binärsensoren**: Fenster-/Türkontakte und Batterie-schwach-Warnung je Gerät.
 - Der **Cube** erscheint als Hub-Gerät mit Firmware-Version; alle Geräte werden
   darunter gruppiert und ihrem MAX!-Raum zugeordnet.

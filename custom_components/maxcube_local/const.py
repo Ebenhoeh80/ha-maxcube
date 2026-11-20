@@ -10,6 +10,11 @@ MIN_SCAN_INTERVAL = 30
 MAX_SCAN_INTERVAL = 600
 
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_CUBE_SERIAL = "cube_serial"
+
+SERVICE_RECONNECT = "reconnect"
+# After a failed poll the integration looks for the Cube under a new IP address, at most this often.
+REDISCOVER_COOLDOWN = 300  # seconds
 
 MANUFACTURER = "eQ-3"
 
