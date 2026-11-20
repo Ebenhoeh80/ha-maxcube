@@ -25,5 +25,5 @@ warn_unused_ignores = true
 # Home Assistant's own type hints for schemas name a newer schema library than voluptuous, which
 # the integrations (and Home Assistant itself) still use at run time.
 [[tool.mypy.overrides]]
-module = ["custom_components.maxcube_local.config_flow", "custom_components.maxcube_local", "custom_components.maxcube_local.climate"]
+module = ["maxcube_local", "maxcube_local.config_flow", "maxcube_local.climate"]
 disable_error_code = ["arg-type"]

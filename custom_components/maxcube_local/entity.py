@@ -30,7 +30,8 @@ def _apply_hub_link(
     if not cube_serial:
         return
     if not _VIA_DEVICE_ID:
-        info["via_device"] = (DOMAIN, cube_serial)
+        # Older Home Assistant versions only know ``via_device``; newer ones removed the key.
+        info["via_device"] = (DOMAIN, cube_serial)  # type: ignore[typeddict-unknown-key]
         return
     hub = dr.async_get(coordinator.hass).async_get_device_by_identifier(
         (DOMAIN, cube_serial), coordinator.config_entry.entry_id
