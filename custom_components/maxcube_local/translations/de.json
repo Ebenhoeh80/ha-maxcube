@@ -56,6 +56,11 @@
     }
   },
   "entity": {
+    "button": {
+      "reboot": {
+        "name": "Cube neu starten"
+      }
+    },
     "sensor": {
       "valve_position": {
         "name": "Ventilstellung"
