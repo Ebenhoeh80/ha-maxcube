@@ -6,7 +6,10 @@ a fake that behaves like the library's ``MaxCube``: no network, but real device 
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import patch
@@ -127,15 +130,35 @@ class FakeCube:
         self.updates = 0
         self.disconnects = 0
         self.fail_updates = 0
+        self.fail_with: type[OSError] = OSError
+        # The real Cube accepts one connection at a time: count threads inside a Cube call.
+        self.io_delay = 0.0
+        self.active = 0
+        self.max_active = 0
+        self._guard = threading.Lock()
         self.errors: dict[str, bool] = {}
         self.accept_writes = True
         self.written: list[tuple[str, str, list[dict[str, Any]]]] = []
 
+    @contextmanager
+    def _in_use(self) -> Iterator[None]:
+        """Track how many Cube calls overlap (and hold the call for ``io_delay`` seconds)."""
+        with self._guard:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(self.io_delay)
+            yield
+        finally:
+            with self._guard:
+                self.active -= 1
+
     def update(self) -> None:
-        self.updates += 1
-        if self.fail_updates:
-            self.fail_updates -= 1
-            raise OSError("Cube not reachable")
+        with self._in_use():
+            self.updates += 1
+            if self.fail_updates:
+                self.fail_updates -= 1
+                raise self.fail_with("Cube not reachable")
 
     def disconnect(self) -> None:
         self.disconnects += 1
@@ -164,11 +187,13 @@ class FakeCube:
         return self.accept_writes
 
     def set_target_temperature(self, device: Any, temperature: float) -> bool:
-        device.target_temperature = temperature
+        with self._in_use():
+            device.target_temperature = temperature
         return True
 
     def set_mode(self, device: Any, mode: int) -> bool:
-        device.mode = mode
+        with self._in_use():
+            device.mode = mode
         return True
 
 

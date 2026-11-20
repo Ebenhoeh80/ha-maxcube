@@ -633,3 +633,58 @@ async def test_an_address_that_cannot_be_reached_is_never_saved(
     assert entry.state is ConfigEntryState.SETUP_RETRY
     assert entry.data[CONF_HOST] == HOST
     assert calls == [HOST]
+
+
+async def test_a_poll_and_a_command_never_use_the_cube_at_the_same_time(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """The Cube accepts a single connection; overlapping calls make one of them fail."""
+    import asyncio
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    cube.io_delay = 0.15
+    cube.max_active = 0
+
+    await asyncio.gather(
+        coordinator.async_refresh(),
+        hass.services.async_call(
+            "climate", "set_temperature", {"entity_id": entity_id, "temperature": 20.5}, blocking=True
+        ),
+        hass.services.async_call(
+            "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "heat"}, blocking=True
+        ),
+    )
+    assert cube.max_active == 1
+
+
+async def test_a_refused_connection_is_tried_once_more_before_the_cube_counts_as_gone(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """Another client (the MAX! app) can hold the single connection for a moment."""
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.fail_with = ConnectionRefusedError
+
+    cube.fail_updates = 1
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success is True
+
+    cube.fail_updates = 2
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+
+
+async def test_a_slow_failure_is_not_repeated(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """A timeout already took long; repeating it would hold the Cube for twice as long."""
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    before = cube.updates
+    cube.fail_with = TimeoutError
+    cube.fail_updates = 1
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    assert cube.updates == before + 1
