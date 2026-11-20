@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-11-20
+
+### Changed
+- **A Cube is identified by its serial number, not by its address.** The entry's unique id and its title are now
+  the serial number (`MAX! Cube JEQ0355273`); before, both contained the address, which changed with every new
+  address and showed a wrong title. Existing entries are migrated at the next start (a title you chose stays);
+  devices, entities, areas and history are not touched. See [`docs/IDENTITY.md`](docs/IDENTITY.md).
+- **Discovery:** after startup the integration looks for Cubes once. A new Cube appears under *Discovered*; a known
+  Cube whose address changed gets the new address and is reloaded once.
+- **The Cube that answers must be the Cube of the entry:** a different Cube at the saved address is no longer taken
+  over; the right one is looked up by its serial number.
+- Changed options reload the entry; a new address no longer causes a second reload.
+
+### Fixed
+- The connection test of the setup dialog did not close its connection, so the Cube stayed occupied until it was
+  cleaned up.
+
 ## [1.3.2] - 2026-11-20
 
 ### Fixed

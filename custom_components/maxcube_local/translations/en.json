@@ -8,6 +8,10 @@
           "host": "IP address",
           "port": "Port"
         }
+      },
+      "discovery_confirm": {
+        "title": "Add the MAX! Cube?",
+        "description": "A MAX! Cube with the serial number {serial} was found at {host}. Do you want to add it?"
       }
     },
     "error": {
@@ -15,7 +19,8 @@
     },
     "abort": {
       "already_configured": "This MAX! Cube is already configured."
-    }
+    },
+    "flow_title": "{name}"
   },
   "options": {
     "step": {

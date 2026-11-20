@@ -253,7 +253,7 @@ async def test_the_cube_is_found_again_under_a_new_address(
         await coordinator.async_refresh()
         await hass.async_block_till_done()
     assert config_entry.data[CONF_HOST] == NEW_HOST
-    assert config_entry.unique_id == NEW_HOST
+    assert config_entry.unique_id == CUBE_SERIAL  # the address changed, the identity did not
 
 
 async def test_another_cube_is_not_taken_for_ours(

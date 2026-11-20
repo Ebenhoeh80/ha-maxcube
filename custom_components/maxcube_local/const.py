@@ -11,6 +11,9 @@ MAX_SCAN_INTERVAL = 600
 
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_CUBE_SERIAL = "cube_serial"
+# Version 1.2 of an entry is identified by the Cube's serial number (earlier: by its address).
+CONFIG_ENTRY_MINOR_VERSION = 2
+TITLE_PREFIX = "MAX! Cube"
 
 SERVICE_RECONNECT = "reconnect"
 # A programme is not written when the Cube has already used this share of its radio time.
