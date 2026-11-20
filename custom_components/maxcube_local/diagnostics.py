@@ -11,7 +11,9 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_CUBE_SERIAL
 from .coordinator import MaxCubeConfigEntry
 
-TO_REDACT = {CONF_HOST, CONF_CUBE_SERIAL, "serial", "name", "room"}
+# The title and the unique id of an entry contain the serial number of the Cube; they are not part
+# of the report today, but would be hidden if they ever were.
+TO_REDACT = {CONF_HOST, CONF_CUBE_SERIAL, "serial", "name", "room", "title", "unique_id"}
 
 
 async def async_get_config_entry_diagnostics(

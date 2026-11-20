@@ -846,3 +846,35 @@ async def test_every_preset_of_the_thermostat_has_a_translated_name(
     assert "on" in presets
     states = _translations(file)["entity"]["climate"]["thermostat"]["state_attributes"]["preset_mode"]["state"]
     assert set(presets) <= set(states)
+
+
+async def test_no_identifier_appears_anywhere_in_the_diagnostics(hass: HomeAssistant, cube: FakeCube) -> None:
+    """Search the whole report (as it is downloaded) for every address, serial number and name."""
+    import json
+
+    from custom_components.maxcube_local.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CUBE_SERIAL,
+        title=f"MAX! Cube ({CUBE_SERIAL})",
+        data={CONF_HOST: HOST, "port": 62910, CONF_CUBE_SERIAL: CUBE_SERIAL},
+    )
+    await _setup(hass, entry)
+    report = json.dumps(await async_get_config_entry_diagnostics(hass, entry), default=str)
+
+    identifiers = {
+        "host": HOST,
+        "serial of the Cube": CUBE_SERIAL,
+        "title": entry.title,
+        "unique id": entry.unique_id,
+        "room": '"Bad"',
+    }
+    for device in cube.devices:
+        identifiers[f"serial of {device.rf_address}"] = device.serial
+        identifiers[f"name of {device.rf_address}"] = device.name
+    for what, value in identifiers.items():
+        assert value not in report, f"{what} leaks into the diagnostics"
+    assert "192.168" not in report
