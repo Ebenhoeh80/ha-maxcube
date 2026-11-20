@@ -16,7 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 
-from .conftest import CUBE_SERIAL, DAY, RADIATOR, WALL, WINDOW, FakeCube
+from .conftest import CUBE_SERIAL, DAY, HOST, RADIATOR, WALL, WINDOW, FakeCube
 
 NEW_HOST = "192.168.10.99"
 
@@ -243,9 +243,12 @@ async def test_the_cube_is_found_again_under_a_new_address(
     await _setup(hass, config_entry)
     coordinator = config_entry.runtime_data
     cube.fail_updates = 1
-    with patch(
-        "custom_components.maxcube_local.coordinator.discover_cubes",
-        return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}],
+    with (
+        patch(
+            "custom_components.maxcube_local.coordinator.discover_cubes",
+            return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}],
+        ),
+        patch("custom_components.maxcube_local.coordinator.is_reachable", return_value=True),
     ):
         await coordinator.async_refresh()
         await hass.async_block_till_done()
@@ -566,3 +569,67 @@ async def test_the_user_may_delete_only_a_device_the_cube_no_longer_lists(
 
     cube.devices.clear()
     assert not await async_remove_config_entry_device(hass, config_entry, orphan)
+FACTORY_ADDRESS = "192.168.0.222"
+
+
+def _entry_with_serial() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=HOST,
+        data={CONF_HOST: HOST, "port": 62910, CONF_CUBE_SERIAL: CUBE_SERIAL},
+    )
+
+
+def _factory(cube: FakeCube, calls: list[str]):
+    """A Cube class that does not answer at the saved address, but at any other."""
+
+    def build(host: str, port: int, *args: object, **kwargs: object) -> FakeCube:
+        calls.append(host)
+        if host == HOST:
+            raise OSError("timed out")
+        return cube
+
+    return build
+
+
+async def test_setup_finds_the_cube_again_when_the_saved_address_does_not_answer(
+    hass: HomeAssistant, cube: FakeCube
+) -> None:
+    """The Cube was off or got a new lease while Home Assistant started."""
+    entry = _entry_with_serial()
+    entry.add_to_hass(hass)
+    calls: list[str] = []
+    with (
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", _factory(cube, calls)),
+        patch(
+            "custom_components.maxcube_local.coordinator.discover_cubes",
+            return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}],
+        ),
+        patch("custom_components.maxcube_local.coordinator.is_reachable", return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.data[CONF_HOST] == NEW_HOST
+    assert calls == [HOST, NEW_HOST]
+
+
+async def test_an_address_that_cannot_be_reached_is_never_saved(
+    hass: HomeAssistant, cube: FakeCube
+) -> None:
+    """A Cube without a lease answers from its factory address; that address is useless."""
+    entry = _entry_with_serial()
+    entry.add_to_hass(hass)
+    calls: list[str] = []
+    with (
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", _factory(cube, calls)),
+        patch(
+            "custom_components.maxcube_local.coordinator.discover_cubes",
+            return_value=[{"host": FACTORY_ADDRESS, "serial": CUBE_SERIAL}],
+        ),
+        patch("custom_components.maxcube_local.coordinator.is_reachable", return_value=False),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.data[CONF_HOST] == HOST
+    assert calls == [HOST]
