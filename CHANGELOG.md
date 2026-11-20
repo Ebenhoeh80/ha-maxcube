@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (planned 1.4.0, waits for pull request #3)
+
+### Added
+- **Home Assistant Integration Quality Scale: Gold** (`quality_scale.yaml`), `icons.json`,
+  `PARALLEL_UPDATES`, descriptions for all dialog fields and README sections (configuration, supported
+  devices and functions, data updates, use cases, troubleshooting, removal, known limitations).
+- **Reconfigure flow:** change the Cube's address without removing the entry.
+- **Repair hints** for a low battery and a device error, and a **diagnostics download** with addresses,
+  serial numbers and names removed; the diagnostics also show how many polls ran, failed and how long the last took.
+- **Devices paired later get their entities at the next poll;** devices that left the Cube are removed after
+  the next reload or restart and may be deleted in the UI.
+- Link-status diagnostics and a reboot button from a contributor (pull request #3, rebased; not released until
+  the origin of the code is confirmed).
+- CI: ruff, mypy with the real Home Assistant types, xenon, CodeQL, 95 % coverage gate;
+  [`docs/ENGINEERING.md`](docs/ENGINEERING.md) documents architecture, failure modes, measurements and decisions.
+
+### Fixed
+- **Poll and commands no longer overlap on the Cube's single connection** (a test showed two threads in a
+  Cube call at once; calls are serialised now).
+- A poll refused or reset by the Cube (for example while the MAX! app holds the connection) is repeated once.
+- Read-backs after commands are merged for 2 s instead of 10 s.
+- The reboot button no longer raises on a network error.
+
 ## [1.3.2] - 2026-11-20
 
 ### Fixed
