@@ -8,14 +8,21 @@
           "host": "IP-Adresse",
           "port": "Port"
         }
+      },
+      "discovery_confirm": {
+        "title": "MAX! Cube hinzufügen?",
+        "description": "Ein MAX! Cube mit der Seriennummer {serial} wurde unter {host} gefunden. Möchtest du ihn hinzufügen?"
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen. Prüfe die IP-Adresse und stelle sicher, dass keine andere App mit dem Cube verbunden ist."
+      "cannot_connect": "Verbindung fehlgeschlagen. Prüfe die IP-Adresse und stelle sicher, dass keine andere App mit dem Cube verbunden ist.",
+      "unknown": "Unerwarteter Fehler."
     },
     "abort": {
-      "already_configured": "Dieser MAX! Cube ist bereits eingerichtet."
-    }
+      "already_configured": "Dieser MAX! Cube ist bereits eingerichtet.",
+      "cannot_connect": "Das Gerät hat nicht als MAX! Cube geantwortet."
+    },
+    "flow_title": "{name}"
   },
   "options": {
     "step": {
@@ -107,6 +114,9 @@
     },
     "schedule_not_written": {
       "message": "Der Cube hat das Programm für diese Tage nicht übernommen: {days}."
+    },
+    "duplicate_cube": {
+      "message": "Dieser MAX! Cube wird bereits vom Eintrag „{title}“ verwaltet. Bitte diesen doppelten Eintrag entfernen."
     }
   }
 }
