@@ -52,6 +52,7 @@ const TRANSLATIONS = {
     unsavedChangesShort: "ungespeicherte Änderungen",
     currentStateShort: "Stand = Cube",
     dryRunShort: "Dry-Run",
+    revertButton: "Verwerfen",
   },
   en: {
     dayShort: { monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th", friday: "Fr", saturday: "Sa", sunday: "Su" },
@@ -100,6 +101,7 @@ const TRANSLATIONS = {
     unsavedChangesShort: "unsaved changes",
     currentStateShort: "State = Cube",
     dryRunShort: "Dry-Run",
+    revertButton: "Discard",
   },
 };
 
@@ -247,11 +249,12 @@ class MaxCubeScheduleCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return {};
+    return { size: "medium" };
   }
 
   setConfig(config) {
     this._config = config || {};
+    this._size = this._config.size || "medium";
     const saved = this._loadSel();
     if (this._config.entity) this._entity = this._config.entity;
     else if (saved.entity) this._entity = saved.entity;
@@ -358,6 +361,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     if (!p || !Number.isFinite(v)) return;
     p.temp = v;
     this._dirty = true;
+    this._changedDays.add(this._sel.day);
     this._repaint();
   }
 
@@ -789,7 +793,7 @@ class MaxCubeScheduleCard extends HTMLElement {
       <div class="row">
         <button class="btn" data-act="add" ${list.length >= MAX_ZONES ? "disabled" : ""}>Zone teilen</button>
         <button class="btn danger" data-act="del" ${list.length <= 1 ? "disabled" : ""}>Zone löschen</button>
-        <button class="btn ghost" data-act="revert">${T.dryRunLabelShort}</button>
+        <button class="btn ghost" data-act="revert">${T.revertButton}</button>
       </div>
     </div>`;
   }
@@ -857,6 +861,10 @@ class MaxCubeScheduleCard extends HTMLElement {
       this._days = normalize(this._hass.states[this._entity]?.attributes?.schedule);
     }
 
+    // Apply size class to host
+    this.classList.remove("size-small", "size-medium", "size-large");
+    this.classList.add(`size-${this._size}`);
+
     const tabs = ids
       .map(
         (id) =>
@@ -867,6 +875,9 @@ class MaxCubeScheduleCard extends HTMLElement {
     this.innerHTML = `
       <style>
         :host { display: block; }
+        :host(.size-small) { font-size: 0.85em; }
+        :host(.size-medium) { font-size: 1em; }
+        :host(.size-large) { font-size: 1.15em; }
         .pad { padding: 12px; }
         ha-card { overflow: hidden; }
         .tabs { display: flex; overflow-x: auto; gap: 2px; padding: 4px 4px 0; }
@@ -879,6 +890,31 @@ class MaxCubeScheduleCard extends HTMLElement {
           background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff);
           font-weight: 600;
         }
+        :host(.size-small) .wrap { padding: 4px 8px 8px; }
+        :host(.size-small) .track { height: 20px; }
+        :host(.size-small) .dl { width: 20px; flex: 0 0 20px; font-size: 9px; }
+        :host(.size-small) .zt { font-size: 8px; }
+        :host(.size-small) .legend span { font-size: 8px; }
+        :host(.size-small) .scale { height: 6px; }
+        :host(.size-small) .track { height: 20px; }
+        :host(.size-small) .tin { width: 60px; font-size: 11px; }
+        :host(.size-small) .tin.time { width: 70px; }
+        :host(.size-medium) .wrap { padding: 8px 12px 12px; }
+        :host(.size-medium) .track { height: 26px; }
+        :host(.size-medium) .dl { width: 26px; flex: 0 0 26px; font-size: 11px; }
+        :host(.size-medium) .zt { font-size: 10px; }
+        :host(.size-medium) .legend span { font-size: 9px; }
+        :host(.size-medium) .scale { height: 8px; }
+        :host(.size-medium) .track { height: 26px; }
+        :host(.size-large) .wrap { padding: 12px 16px 16px; }
+        :host(.size-large) .track { height: 32px; }
+        :host(.size-large) .dl { width: 32px; flex: 0 0 32px; font-size: 13px; }
+        :host(.size-large) .zt { font-size: 12px; }
+        :host(.size-large) .legend span { font-size: 10px; }
+        :host(.size-large) .scale { height: 10px; }
+        :host(.size-large) .track { height: 32px; }
+        :host(.size-large) .tin { width: 88px; font-size: 14px; }
+        :host(.size-large) .tin.time { width: 96px; }
         .wrap { padding: 8px 12px 12px; }
         .grid { width: 100%; }
         .ruler, .day { display: flex; align-items: center; }
@@ -931,9 +967,10 @@ class MaxCubeScheduleCard extends HTMLElement {
           box-shadow: 0 0 2px var(--primary-color, #03a9f4);
         }
         .dstat { width: 16px; flex: 0 0 16px; text-align: right; }
-        <legend { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; font-size: 11px;
-                  color: var(--secondary-text-color, #727272); }
-                .scale { flex: 1; height: 9px; border-radius: 4px; }
+                .legend { display: flex; align-items: center; gap: 4px; margin: 8px 0 4px; font-size: 10px;
+                          color: var(--secondary-text-color, #727272); }
+                .legend span { font-size: 9px; white-space: nowrap; }
+                .scale { flex: 1; height: 8px; border-radius: 4px; }
                 .editor { margin-top: 8px; padding: 8px; border-radius: 6px;
                   background: var(--secondary-background-color, #f7f7f7); }
                 .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
