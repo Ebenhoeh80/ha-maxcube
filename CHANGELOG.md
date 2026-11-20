@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-21
+
+### Added
+- **Repair hints for the Cube itself:** one when the Cube has not answered for more than six hours, and one
+  when its radio duty cycle stays at 90 % or more for ten minutes (it goes away below 80 %; at 100 % the Cube stops
+  sending commands for about an hour). Both clear by themselves.
+- **Translated names for the thermostat presets** (none, boost, comfort, eco, away, on) in English and German.
+- `SECURITY.md` with the supported versions, the threat model (the MAX! protocol has no authentication; use the
+  Cube in a trusted network only) and private reporting through GitHub Security Advisories.
+
+### Changed
+- **A command that cannot reach the Cube fails with a clear, translated message** instead of a raw network error
+  (target temperature, mode and preset, and programme writes); a command the Cube does not accept (a false answer,
+  for example when its radio time is used up) is reported the same way. This makes the Silver rule
+  `action-exceptions` of the quality scale true.
+- **Discovery** ignores a datagram whose serial number is not ten capital letters or digits, and the `until` time of
+  the `set_schedule` service must be plain `H:MM`/`HH:MM` with ASCII digits.
+- A programme write keeps one pending check per device instead of registering a new callback for every write; the
+  two locks of the coordinator are documented (they cannot be merged).
+- The diagnostics redact the entry title and unique id as well (they are not part of the report today); a test searches
+  the whole report for addresses, serial numbers and names.
+- CI: read-only token permissions, third-party actions (and the release workflow of `Ebenhoeh80/.github`) pinned to
+  commit SHAs, ruff rules RET, PL, C901 and ANN.
+
 ## [1.4.2] - 2026-11-20
 
 ### Changed

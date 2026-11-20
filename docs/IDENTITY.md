@@ -92,5 +92,5 @@ Entries created by 1.0 to 1.3.2 have `version 1, minor_version 1` and the addres
   A second connection per scan would not change that, so it is not made.
 - **Reauth:** not applicable, the Cube has no authentication. **Reconfigure** (change the address by hand) is part of the
   1.4.0 work and uses `_abort_if_unique_id_mismatch` so that a wrong Cube is refused.
-- **Repair for an unreachable Cube:** not added; the integration cannot fix it, and unavailable entities and the log line
-  about a moved Cube already show it.
+- **Repair for an unreachable Cube:** since 1.5.0 a hint (not fixable by the integration) appears after six hours without an
+  answer; before that, unavailable entities and the log line about a moved Cube show it.

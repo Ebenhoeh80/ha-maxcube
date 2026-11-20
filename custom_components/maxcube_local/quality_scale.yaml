@@ -35,7 +35,9 @@ rules:
   unique-config-entry: done
 
   # --- Silver ---
-  action-exceptions: done
+  action-exceptions:
+    status: done
+    comment: A network error or a refused command in a user action becomes a translated HomeAssistantError (cube_unreachable, command_rejected); tested.
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters: done
@@ -76,7 +78,9 @@ rules:
   exception-translations: done
   icon-translations: done
   reconfiguration-flow: done
-  repair-issues: done
+  repair-issues:
+    status: done
+    comment: Hints for a low battery, a device error, a Cube unreachable for six hours and a busy radio (duty cycle at 90 % or more).
   stale-devices:
     status: done
     comment: Devices the Cube no longer lists are removed from the registry and the user may delete them in the UI. The library only ever adds devices to its list, so a removed device is noticed after the next reload or restart.
