@@ -37,4 +37,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest-homeassistant-custom-component "maxcube-api>=0.4.3"
       - name: Run Home Assistant tests
-        run: pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local --cov-report=term-missing
+        run: |
+          pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local
+          pytest tests --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing
