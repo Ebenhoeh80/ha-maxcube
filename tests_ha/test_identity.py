@@ -24,7 +24,7 @@ from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 from .conftest import CUBE_SERIAL, HOST, FakeCube
 
 NEW_HOST = "192.168.10.99"
-TITLE = f"MAX! Cube {CUBE_SERIAL}"
+TITLE = f"MAX! Cube ({CUBE_SERIAL})"
 CONNECT = "custom_components.maxcube_local.config_flow._try_connect"
 FLOW_DISCOVER = "custom_components.maxcube_local.config_flow.discover_cubes"
 COORD_DISCOVER = "custom_components.maxcube_local.coordinator.discover_cubes"
