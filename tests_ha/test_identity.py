@@ -188,7 +188,7 @@ async def test_the_address_is_found_when_another_cube_took_the_old_one(hass: Hom
 # ------------------------------------------------------------------ the user flow
 
 
-async def test_the_user_flow_identifies_the_cube_by_its_serial(hass: HomeAssistant) -> None:
+async def test_the_user_flow_identifies_the_cube_by_its_serial(hass: HomeAssistant, cube: FakeCube) -> None:
     with patch(FLOW_DISCOVER, return_value=[]), patch(CONNECT, return_value=CUBE_SERIAL):
         result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_HOST: HOST, CONF_PORT: 62910})
@@ -247,7 +247,7 @@ def test_the_connection_test_closes_the_connection() -> None:
 # ------------------------------------------------------------------ discovery
 
 
-async def test_a_new_cube_is_offered_in_the_discovered_list(hass: HomeAssistant) -> None:
+async def test_a_new_cube_is_offered_in_the_discovered_list(hass: HomeAssistant, cube: FakeCube) -> None:
     info = {CONF_HOST: HOST, CONF_CUBE_SERIAL: CUBE_SERIAL}
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_INTEGRATION_DISCOVERY}, data=info
@@ -276,7 +276,7 @@ async def test_discovery_updates_the_address_of_a_cube_that_is_set_up(hass: Home
     assert entry.runtime_data is not first  # reloaded once with the new address
 
 
-async def test_discovery_recognises_an_entry_that_is_not_migrated_yet(hass: HomeAssistant) -> None:
+async def test_discovery_recognises_an_entry_that_is_not_migrated_yet(hass: HomeAssistant, cube: FakeCube) -> None:
     entry = _legacy()
     entry.add_to_hass(hass)
     result = await hass.config_entries.flow.async_init(
