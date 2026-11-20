@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.11+-41BDF5.svg?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 [![Donate via PayPal](https://img.shields.io/badge/❤%20Donate-PayPal-00457C.svg?logo=paypal&logoColor=white)](https://www.paypal.com/pool/9p84qTHCFr?sr=wccr)
+[![Buy Me a Coffee](https://img.shields.io/badge/%E2%98%95%20Buy%20me%20a%20coffee-FFDD00.svg?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/daneben)
 
 [English](README.md) | [Deutsch](README.de.md)
 
@@ -45,11 +46,15 @@ integration that ships with Home Assistant Core.
 
 ## ⬇️ Installation (HACS)
 
-1. HACS → three-dot menu → **Custom repositories**.
-2. Add `https://github.com/Ebenhoeh80/ha-maxcube`, category **Integration**.
-3. Install **eQ-3 MAX! Cube**, then restart Home Assistant.
-4. **Settings → Devices & Services → Add Integration → eQ-3 MAX! Cube**, and enter
-   the Cube's IP address.
+1. In HACS, search for **eQ-3 MAX! Cube** and install it.
+2. Restart Home Assistant.
+3. **Settings → Devices & Services → Add Integration → eQ-3 MAX! Cube**, and enter
+   the Cube's IP address (it is pre-filled when the Cube is found automatically).
+
+If you do not find it in HACS yet, add it as a custom repository instead: HACS →
+three-dot menu → **Custom repositories**, add
+`https://github.com/Ebenhoeh80/ha-maxcube` with category **Integration**, then install
+it as above.
 
 (Or copy `custom_components/maxcube_local` into your `config/custom_components` folder.)
 

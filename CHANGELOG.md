@@ -5,7 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-11-20
+
+The integration is stable: entities, configuration data and services stay as they are. From
+now on version numbers follow [Semantic Versioning](https://semver.org/): a breaking change
+raises the major version, a new feature the minor version, a fix the patch version.
+
+### Changed
+- README (en/de): the installation section now starts with finding **eQ-3 MAX! Cube** through
+  HACS search (the integration is in the HACS catalog); the custom repository steps stay as a
+  fallback.
 
 ### Fixed
 - **No more deprecation warnings on Home Assistant 2026.11.** The thermostats now
