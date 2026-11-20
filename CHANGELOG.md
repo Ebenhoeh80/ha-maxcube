@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-20
+
+### Changed
+- **The entry title shows the serial number in parentheses:** "MAX! Cube (JEQ0355273)". An entry with a
+  generated title is renamed at the next start; a title you chose stays.
+- Clearer names: the reboot button is "Restart" (it appears under the Cube device), the error sensor of a device is
+  "Device error" ("Gerätefehler").
+
 ## [1.4.1] - 2026-11-20
 
 ### Fixed

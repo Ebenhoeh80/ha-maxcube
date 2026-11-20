@@ -12,13 +12,14 @@ import re
 
 from .const import TITLE_PREFIX
 
-# "MAX! Cube (192.168.10.60)" is what versions up to 1.3.2 generated; "MAX! Cube KEQ0523864" is the new form.
+# "MAX! Cube (192.168.10.60)" is what versions up to 1.3.2 generated, "MAX! Cube KEQ0523864" what 1.3.3 to
+# 1.4.1 generated; "MAX! Cube (KEQ0523864)" is the form since 1.4.2 (the serial number in parentheses).
 _GENERATED_TITLE = re.compile(rf"^{re.escape(TITLE_PREFIX)}( \(.*\)| [A-Z0-9]{{10}})?$")
 
 
 def cube_title(serial: str) -> str:
     """Return the title of the config entry of the Cube with this serial number."""
-    return f"{TITLE_PREFIX} {serial}"
+    return f"{TITLE_PREFIX} ({serial})"
 
 
 def is_generated_title(title: str) -> bool:

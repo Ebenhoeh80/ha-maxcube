@@ -155,6 +155,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
             entry.minor_version < CONFIG_ENTRY_MINOR_VERSION
             or entry.unique_id != cube.serial
             or entry.data.get(CONF_CUBE_SERIAL) != cube.serial
+            # a title the integration generated in an older form is brought to the current one
+            or (is_generated_title(entry.title) and entry.title != cube_title(cube.serial))
         ):
             _async_apply_identity(hass, entry, cube.serial)
 

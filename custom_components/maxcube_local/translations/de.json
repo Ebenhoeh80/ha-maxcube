@@ -58,7 +58,7 @@
   "entity": {
     "button": {
       "reboot": {
-        "name": "Cube neu starten"
+        "name": "Neustart"
       }
     },
     "sensor": {
@@ -77,7 +77,7 @@
         "name": "Nicht initialisiert"
       },
       "device_error": {
-        "name": "Fehler"
+        "name": "Gerätefehler"
       },
       "radio_fault": {
         "name": "Funkstörung"
