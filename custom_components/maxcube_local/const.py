@@ -23,6 +23,12 @@ MAX_DUTY_CYCLE_FOR_WRITING = 90  # percent
 SCHEDULE_VERIFY_DELAY = 300  # seconds
 # After a failed poll the integration looks for the Cube under a new IP address, at most this often.
 REDISCOVER_COOLDOWN = 300  # seconds
+# A poll is repeated once if the Cube refused or dropped the connection (another client such as the
+# MAX! app can hold its single connection for a moment); a timeout is not repeated, it took long enough.
+POLL_RETRY_DELAY = 1.0  # seconds
+# After a command the state is read back at once; further read-backs within this time are merged.
+# (Home Assistant's default is 10 s, which leaves the second of two quick changes unseen for that long.)
+REQUEST_REFRESH_COOLDOWN = 2.0  # seconds
 
 MANUFACTURER = "eQ-3"
 

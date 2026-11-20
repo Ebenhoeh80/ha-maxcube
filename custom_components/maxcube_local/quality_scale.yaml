@@ -1,0 +1,93 @@
+# Home Assistant Integration Quality Scale status for maxcube_local.
+# https://developers.home-assistant.io/docs/core/integration-quality-scale/
+# Honest status: "todo" means not done yet, "exempt" always carries the reason.
+rules:
+  # --- Bronze ---
+  action-setup: done
+  appropriate-polling: done
+  brands:
+    status: exempt
+    comment: Distributed via HACS, not submitted to the core brands repository; the brand folder is shipped with the integration.
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency:
+    status: done
+    comment: The only requirement is maxcube-api, published on PyPI from a public repository.
+  docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: The integration offers no conditions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration offers no triggers.
+  entity-event-setup:
+    status: done
+    comment: Entities derive from CoordinatorEntity, which manages the subscription.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # --- Silver ---
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow:
+    status: exempt
+    comment: The Cube has no authentication.
+  test-coverage:
+    status: done
+    comment: The unit tests and the tests in a real Home Assistant core together cover 96 %; CI fails below 95 %.
+
+  # --- Gold ---
+  devices: done
+  diagnostics: done
+  discovery:
+    status: exempt
+    comment: The Cube offers no Home Assistant discovery protocol; its UDP broadcast is used inside the config flow to pre-fill the address.
+  discovery-update-info:
+    status: done
+    comment: After a failed poll the Cube is looked up by its serial number and the new address is saved.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: done
+    comment: Every poll reconnects and reads the device list again, so a device paired while Home Assistant runs gets its entities at the next poll.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues: done
+  stale-devices:
+    status: done
+    comment: Devices the Cube no longer lists are removed from the registry and the user may delete them in the UI. The library only ever adds devices to its list, so a removed device is noticed after the next reload or restart.
+
+  # --- Platinum ---
+  async-dependency:
+    status: todo
+    comment: maxcube-api is synchronous and is run in the executor.
+  inject-websession:
+    status: exempt
+    comment: The integration makes no HTTP requests.
+  strict-typing:
+    status: todo
+    comment: Type hints are present but the code is not checked with strict mypy.

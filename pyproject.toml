@@ -1,0 +1,29 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# Home Assistant's own type hints for schemas name a newer schema library than voluptuous, which
+# the integrations (and Home Assistant itself) still use at run time.
+[[tool.mypy.overrides]]
+module = ["maxcube_local", "maxcube_local.config_flow", "maxcube_local.climate"]
+disable_error_code = ["arg-type"]

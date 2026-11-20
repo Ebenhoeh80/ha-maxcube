@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import Any
 
 ISSUE_BATTERY = "battery_low"
 ISSUE_ERROR = "device_error"
@@ -18,7 +19,9 @@ class DeviceFinding:
     name: str
 
 
-def find_problems(devices: Iterable, status_of) -> list[DeviceFinding]:
+def find_problems(
+    devices: Iterable[Any], status_of: Callable[[str], Any]
+) -> list[DeviceFinding]:
     """Return the findings for all devices.
 
     ``status_of(rf_address)`` returns an object with an ``error`` attribute (``True``, ``False`` or

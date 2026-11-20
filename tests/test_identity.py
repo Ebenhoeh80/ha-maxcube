@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from maxcube_local import identity
 
 

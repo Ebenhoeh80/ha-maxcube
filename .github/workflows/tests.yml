@@ -6,6 +6,22 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Ruff
+        run: |
+          python -m pip install ruff
+          ruff check custom_components tests tests_ha
+      - name: Complexity (xenon)
+        run: |
+          python -m pip install xenon
+          xenon --max-absolute B --max-modules A --max-average A custom_components
+
   tests:
     runs-on: ubuntu-latest
     strategy:
@@ -37,4 +53,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest-homeassistant-custom-component "maxcube-api>=0.4.3"
       - name: Run Home Assistant tests
-        run: pytest -c tests_ha/pytest.ini tests_ha
+        run: |
+          pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local
+          pytest tests -o asyncio_mode=auto -p no:cacheprovider --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing --cov-fail-under=95
+      - name: Type check (mypy, with the real Home Assistant types)
+        run: |
+          pip install mypy
+          mypy custom_components/maxcube_local

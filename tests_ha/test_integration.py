@@ -19,6 +19,7 @@ from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 from .conftest import CUBE_SERIAL, DAY, HOST, RADIATOR, WALL, WINDOW, FakeCube
 
 NEW_HOST = "192.168.10.99"
+NO_CUBES_FOUND = ("custom_components.maxcube_local.coordinator.discover_cubes", [])
 
 
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -305,7 +306,9 @@ async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
 async def test_the_diagnostics_hide_addresses_and_names(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    from custom_components.maxcube_local.diagnostics import async_get_config_entry_diagnostics
+    from custom_components.maxcube_local.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
 
     await _setup(hass, config_entry)
     data = await async_get_config_entry_diagnostics(hass, config_entry)
@@ -315,6 +318,287 @@ async def test_the_diagnostics_hide_addresses_and_names(
     assert data["devices"][0]["raw_flags"] == "0200"
 
 
+async def test_reconfigure_changes_the_address_and_keeps_the_identity(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    title = config_entry.title
+    result = await config_entry.start_reconfigure_flow(hass)
+    assert result["step_id"] == "reconfigure"
+    with patch(
+        "custom_components.maxcube_local.config_flow._try_connect", return_value=CUBE_SERIAL
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == "abort" and result["reason"] == "reconfigure_successful"
+    assert config_entry.data[CONF_HOST] == NEW_HOST
+    assert config_entry.unique_id == CUBE_SERIAL  # the address changed, the identity did not
+    assert config_entry.title == title
+
+
+async def test_reconfigure_refuses_another_cube(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await config_entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.maxcube_local.config_flow._try_connect", return_value="KEQ9999999"
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+    assert result["type"] == "abort" and result["reason"] == "wrong_cube"
+    assert config_entry.data[CONF_HOST] == HOST
+    assert config_entry.unique_id == CUBE_SERIAL
+
+
+async def test_reconfigure_shows_an_error_when_the_new_address_does_not_answer(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await config_entry.start_reconfigure_flow(hass)
+    with patch("custom_components.maxcube_local.config_flow._try_connect", side_effect=OSError):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_the_user_flow_creates_an_entry(hass: HomeAssistant, cube: FakeCube) -> None:
+    with (
+        patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]),
+        patch(
+            "custom_components.maxcube_local.config_flow._try_connect", return_value=CUBE_SERIAL
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        assert result["step_id"] == "user"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: "192.168.10.70", "port": 62910}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_HOST] == "192.168.10.70"
+    assert result["data"][CONF_CUBE_SERIAL] == CUBE_SERIAL
+    assert result["result"].unique_id == CUBE_SERIAL
+
+
+async def test_the_user_flow_reports_an_unreachable_cube_and_prefills_a_found_one(
+    hass: HomeAssistant, cube: FakeCube
+) -> None:
+    found = [{"host": "192.168.10.71", "serial": "KEQ9999999"}]
+    with patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=found):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    assert result["step_id"] == "user"
+    with patch("custom_components.maxcube_local.config_flow._try_connect", side_effect=OSError):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: "192.168.10.71", "port": 62910}
+        )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_the_user_flow_refuses_a_cube_that_is_already_configured(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    config_entry.add_to_hass(hass)
+    with (
+        patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]),
+        patch(
+            "custom_components.maxcube_local.config_flow._try_connect", return_value=CUBE_SERIAL
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: config_entry.data[CONF_HOST], "port": 62910}
+        )
+    assert result["type"] == "abort" and result["reason"] == "already_configured"
+
+
+async def test_the_poll_interval_can_be_changed_in_the_options(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    assert result["step_id"] == "init"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 120}
+    )
+    assert result["type"] == "create_entry"
+    assert config_entry.options["scan_interval"] == 120
+
+
+
+async def _climate_call(hass: HomeAssistant, service: str, entity_id: str, **data: object) -> None:
+    await hass.services.async_call(
+        "climate", service, {"entity_id": entity_id, **data}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+
+async def test_the_hvac_modes_and_presets_are_written_to_the_cube(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from maxcube.device import (
+        MAX_DEVICE_MODE_AUTOMATIC,
+        MAX_DEVICE_MODE_BOOST,
+        MAX_DEVICE_MODE_MANUAL,
+        MAX_DEVICE_MODE_VACATION,
+    )
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    device = cube.devices[0]
+
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="off")
+    assert device.target_temperature == 4.5
+
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="heat")
+    assert device.target_temperature >= 5.0
+
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="auto")
+    assert device.mode == MAX_DEVICE_MODE_AUTOMATIC
+
+    for preset, expected_mode in (
+        ("boost", MAX_DEVICE_MODE_BOOST),
+        ("away", MAX_DEVICE_MODE_VACATION),
+        ("none", MAX_DEVICE_MODE_AUTOMATIC),
+    ):
+        await _climate_call(hass, "set_preset_mode", entity_id, preset_mode=preset)
+        assert device.mode == expected_mode
+
+    device.mode = MAX_DEVICE_MODE_MANUAL
+    await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="comfort")
+    assert device.target_temperature == device.comfort_temperature
+    await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="eco")
+    assert device.target_temperature == device.eco_temperature
+    await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="on")
+    assert device.target_temperature == 30.5
+    await _climate_call(hass, "set_temperature", entity_id, temperature=19.5)
+    assert device.target_temperature == 19.5
+
+
+async def test_the_climate_state_reflects_mode_valve_and_preset(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from maxcube.device import MAX_DEVICE_MODE_BOOST, MAX_DEVICE_MODE_MANUAL
+
+    device = cube.devices[0]
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    coordinator = config_entry.runtime_data
+
+    async def state():
+        coordinator.async_set_updated_data(None)
+        await hass.async_block_till_done()
+        return hass.states.get(entity_id)
+
+    device.valve_position = 40
+    assert (await state()).attributes["hvac_action"] == "heating"
+    device.valve_position = 0
+    assert (await state()).attributes["hvac_action"] == "idle"
+    device.target_temperature = 4.5
+    assert (await state()).attributes["hvac_action"] == "off"
+    device.target_temperature, device.mode = 30.5, MAX_DEVICE_MODE_MANUAL
+    assert (await state()).attributes["preset_mode"] == "on"
+    device.target_temperature = device.eco_temperature
+    assert (await state()).attributes["preset_mode"] == "eco"
+    device.target_temperature = 20.0
+    assert (await state()).attributes["preset_mode"] == "none"
+    device.mode = MAX_DEVICE_MODE_BOOST
+    assert (await state()).attributes["preset_mode"] == "boost"
+
+
+async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.button import MaxCubeRebootButton
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "button", f"{CUBE_SERIAL}_reboot")
+    er.async_get(hass).async_update_entity(entity_id, disabled_by=None)
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
+    sent = sock.return_value.sendto.call_args.args[0]
+    assert sent == b"eQ3Max*\x00" + CUBE_SERIAL.encode() + b"R"
+
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        sock.return_value.sendto.side_effect = OSError("unreachable")
+        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
+    assert sock.return_value.close.called
+
+
+async def test_a_serial_of_the_wrong_length_is_not_sent(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.button import MaxCubeRebootButton
+
+    await _setup(hass, config_entry)
+    button = MaxCubeRebootButton(config_entry.runtime_data)
+    button.hass = hass
+    button._serial = "SHORT"
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        await button.async_press()
+    assert not sock.called
+
+
+async def test_a_device_paired_later_gets_its_entities_without_a_reload(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from .conftest import _thermostat
+
+    await _setup(hass, config_entry)
+    new = _thermostat()
+    new.rf_address, new.name, new.serial = "0A1B2F", "Kitchen Thermostat", "KEQ4444444"
+    cube.devices.append(new)
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert _entity_id(hass, "climate", "0A1B2F")
+    assert _entity_id(hass, "sensor", "0A1B2F_valve")
+    assert _entity_id(hass, "binary_sensor", "0A1B2F_battery")
+
+
+async def test_a_device_that_left_the_cube_is_removed_but_an_empty_list_is_not_trusted(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    registry = dr.async_get(hass)
+    assert registry.async_get_device_by_identifier((DOMAIN, WINDOW), config_entry.entry_id) is not None
+
+    gone = cube.devices.pop()  # the window contact
+    assert gone.rf_address == WINDOW
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert registry.async_get_device_by_identifier((DOMAIN, WINDOW), config_entry.entry_id) is None
+    assert registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id) is not None
+
+    cube.devices.clear()  # a failed read must not wipe the registry
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id) is not None
+
+
+async def test_the_user_may_delete_only_a_device_the_cube_no_longer_lists(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local import async_remove_config_entry_device
+
+    await _setup(hass, config_entry)
+    registry = dr.async_get(hass)
+    present = registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id)
+    assert not await async_remove_config_entry_device(hass, config_entry, present)
+
+    orphan = registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id, identifiers={(DOMAIN, "FFFFFF")}
+    )
+    assert await async_remove_config_entry_device(hass, config_entry, orphan)
+
+    cube.devices.clear()
+    assert not await async_remove_config_entry_device(hass, config_entry, orphan)
 FACTORY_ADDRESS = "192.168.0.222"
 
 
@@ -379,3 +663,106 @@ async def test_an_address_that_cannot_be_reached_is_never_saved(
     assert entry.state is ConfigEntryState.SETUP_RETRY
     assert entry.data[CONF_HOST] == HOST
     assert calls == [HOST]
+
+
+async def test_a_poll_and_a_command_never_use_the_cube_at_the_same_time(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """The Cube accepts a single connection; overlapping calls make one of them fail."""
+    import asyncio
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    cube.io_delay = 0.15
+    cube.max_active = 0
+
+    await asyncio.gather(
+        coordinator.async_refresh(),
+        hass.services.async_call(
+            "climate", "set_temperature", {"entity_id": entity_id, "temperature": 20.5}, blocking=True
+        ),
+        hass.services.async_call(
+            "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "heat"}, blocking=True
+        ),
+    )
+    assert cube.max_active == 1
+
+
+async def test_a_refused_connection_is_tried_once_more_before_the_cube_counts_as_gone(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """Another client (the MAX! app) can hold the single connection for a moment."""
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.fail_with = ConnectionRefusedError
+
+    with patch("custom_components.maxcube_local.coordinator.POLL_RETRY_DELAY", 0):
+        cube.fail_updates = 1
+        await coordinator.async_refresh()
+        assert coordinator.last_update_success is True
+
+        cube.fail_updates = 2
+        with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+            await coordinator.async_refresh()
+        assert coordinator.last_update_success is False
+
+
+async def test_a_slow_failure_is_not_repeated(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """A timeout already took long; repeating it would hold the Cube for twice as long."""
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    before = cube.updates
+    cube.fail_with = TimeoutError
+    cube.fail_updates = 1
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    assert cube.updates == before + 1
+
+
+async def test_the_polls_are_counted_and_timed_in_the_diagnostics(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.diagnostics import async_get_config_entry_diagnostics
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.io_delay = 0.02
+    await coordinator.async_refresh()
+    with patch(NO_CUBES_FOUND[0], return_value=NO_CUBES_FOUND[1]):
+        cube.fail_updates = 1
+        await coordinator.async_refresh()
+    data = await async_get_config_entry_diagnostics(hass, config_entry)
+    assert data["polls"]["failed"] == 1
+    assert data["polls"]["total"] >= 3
+    assert data["polls"]["last_duration_ms"] >= 20
+
+
+async def test_two_quick_commands_are_read_back_within_a_few_seconds(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
+) -> None:
+    """The default merge time of 10 s would leave the second change unseen for that long."""
+    from datetime import timedelta
+
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+
+    async def change(temperature: float) -> None:
+        await hass.services.async_call(
+            "climate", "set_temperature", {"entity_id": entity_id, "temperature": temperature}, blocking=True
+        )
+        await hass.async_block_till_done()
+
+    await change(19.0)  # read back at once
+    before = cube.updates
+    await change(20.0)  # inside the cooldown: read back after it
+    assert cube.updates == before
+    freezer.tick(timedelta(seconds=3))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert cube.updates == before + 1

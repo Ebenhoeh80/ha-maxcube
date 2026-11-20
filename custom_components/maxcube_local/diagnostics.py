@@ -48,6 +48,12 @@ async def async_get_config_entry_diagnostics(
                 "free_memory_slots": getattr(cube, "free_memory_slots", None),
             },
             "last_update_success": coordinator.last_update_success,
+            "polls": {
+                "total": coordinator.polls,
+                "failed": coordinator.failed_polls,
+                "last_duration_ms": coordinator.last_poll_ms,
+                "interval_s": coordinator.scan_interval,
+            },
             "devices": devices,
         },
         TO_REDACT,
