@@ -5,7 +5,9 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (planned 1.4.0, waits for pull request #3)
+## [Unreleased]
+
+## [1.4.0] - 2026-11-20
 
 ### Added
 - **Home Assistant Integration Quality Scale: Gold** (`quality_scale.yaml`), `icons.json`,
@@ -17,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   serial numbers and names removed; the diagnostics also show how many polls ran, failed and how long the last took.
 - **Devices paired later get their entities at the next poll;** devices that left the Cube are removed after
   the next reload or restart and may be deleted in the UI.
-- Link-status diagnostics and a reboot button from a contributor (pull request #3, rebased; not released until
-  the origin of the code is confirmed).
+- **Link-status diagnostics and a reboot button**, contributed by @helpmeifyoucan (pull request #3, rebased
+  onto 1.3.3 in #17): the Cube's per-device flags (Error, Link error, Not initialized, No data received) as
+  diagnostic sensors with the raw flag bytes as an attribute, and a button that reboots the Cube. "Radio fault",
+  "Not initialized" and the reboot button are disabled by default.
 - CI: ruff, mypy with the real Home Assistant types, xenon, CodeQL, 95 % coverage gate;
   [`docs/ENGINEERING.md`](docs/ENGINEERING.md) documents architecture, failure modes, measurements and decisions.
 
