@@ -7,12 +7,12 @@ from maxcube_local import identity
 
 
 def test_the_title_is_built_from_the_serial_number() -> None:
-    assert identity.cube_title("JEQ0355273") == "MAX! Cube JEQ0355273"
+    assert identity.cube_title("JEQ0355273") == "MAX! Cube (JEQ0355273)"
 
 
 @pytest.mark.parametrize(
     "title",
-    ["MAX! Cube (192.168.10.60)", "MAX! Cube JEQ0355273", "MAX! Cube"],
+    ["MAX! Cube (192.168.10.60)", "MAX! Cube JEQ0355273", "MAX! Cube (JEQ0355273)", "MAX! Cube"],
 )
 def test_titles_made_by_the_integration_are_recognised(title: str) -> None:
     assert identity.is_generated_title(title)
