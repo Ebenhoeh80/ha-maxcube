@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Lovelace card for the weekly heating programme, contributed by @helpmeifyoucan (#25). It is served by the
+  integration itself (no resource to add), lists radiator thermostats only, sends only changed days and asks for
+  confirmation before many radio telegrams.
+
+### Changed
+- The manifest now lists `frontend` and `http` as dependencies (both are part of every normal Home Assistant
+  setup); they are needed to serve and load the card.
+
 ## [1.5.0] - 2026-11-21
 
 ### Added
