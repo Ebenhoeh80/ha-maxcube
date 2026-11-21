@@ -50,9 +50,9 @@ DAY = [
 
 def device_config_entries(device: dr.DeviceEntry) -> set[str]:
     """The config entries a device belongs to (a set in 2025.3, ``config_entry_id`` in newer versions)."""
-    if hasattr(device, "config_entries"):
-        return set(device.config_entries)
-    return {device.config_entry_id}  # type: ignore[attr-defined]
+    if hasattr(device, "config_entry_id"):
+        return {device.config_entry_id}
+    return set(device.config_entries)  # type: ignore[attr-defined]
 
 
 def device_for_identifier(
