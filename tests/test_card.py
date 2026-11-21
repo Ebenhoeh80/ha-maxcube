@@ -62,3 +62,18 @@ def test_dynamic_values_are_escaped_before_they_reach_innerhtml() -> None:
         assert risky not in SOURCE, f"{risky} is written to HTML without esc()"
     # names are free text from Home Assistant: every template use goes through esc()
     assert SOURCE.count("esc(this._name(") >= 3
+
+
+def test_no_text_key_is_unused() -> None:
+    unused = set(_language_keys("en")) - _used_keys() - {"dayShort", "dayLong"}
+    assert not unused, f"unused keys {sorted(unused)}"
+
+
+def test_sending_is_limited_to_changed_days_and_asks_for_many_telegrams() -> None:
+    assert "DAYS;" not in SOURCE.replace("const DAYS", ""), "must not fall back to all days"
+    assert "this._changedDays.size > 0\n      ? [...this._changedDays]" not in SOURCE
+    assert "T.nothingToSend" in SOURCE
+    assert "T.confirmSend(" in SOURCE
+    assert "RADIO_PERCENT_PER_TELEGRAM" in SOURCE
+    assert "sent_not_confirmed" in SOURCE
+    assert '"failed"' in SOURCE

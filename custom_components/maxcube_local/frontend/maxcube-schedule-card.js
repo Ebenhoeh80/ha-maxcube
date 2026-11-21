@@ -29,6 +29,8 @@ const TRANSLATIONS = {
     dryRun: "Dry-Run",
     sending: "sendet…",
     send: (days) => `${days} an Cube senden`,
+    sendIdle: "An Cube senden",
+    resultState: { confirmed: "bestätigt", "dry-run": "geprüft", sent_not_confirmed: "gesendet, noch nicht bestätigt", failed: "fehlgeschlagen" },
     unsavedChanges: "ungespeicherte Änderungen",
     currentState: "Stand = Cube",
     discardUnsaved: "Ungespeicherte Änderungen verwerfen?",
@@ -80,6 +82,8 @@ const TRANSLATIONS = {
     dryRun: "Dry run",
     sending: "sending…",
     send: (days) => `Send ${days} to Cube`,
+    sendIdle: "Send to Cube",
+    resultState: { confirmed: "confirmed", "dry-run": "checked", sent_not_confirmed: "sent, not confirmed yet", failed: "failed" },
     unsavedChanges: "unsaved changes",
     currentState: "State = Cube",
     discardUnsaved: "Discard unsaved changes?",
@@ -118,12 +122,21 @@ const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"
 const DAY_SHORT = T.dayShort;
 const DAY_LONG = T.dayLong;
 
+const STATE_ICON = { confirmed: "✔", "dry-run": "✔", sent_not_confirmed: "⚠", failed: "✖" };
+
 const MAX_ZONES = 7;       // the Cube accepts at most seven setpoints per write
 const MIN_TEMP = 4.5;
 const MAX_TEMP = 30.5;
 const END = 24 * 60;
 const SNAP = 15;           // drag grid
 const MIN_LEN = 15;        // shortest zone a drag may produce
+// One programme write for one day is one radio telegram. Measured on a real Cube, six writes
+// raised the duty cycle from 4 % to 21 %, so about 2.8 % each (docs/ENGINEERING.md, section 4).
+// The service refuses to write at a duty cycle of 90 % and above.
+const RADIO_PERCENT_PER_TELEGRAM = 2.8;
+const CONFIRM_ABOVE_DEVICES = 1;
+const CONFIRM_ABOVE_DAYS = 3;
+const HOLD_AFTER_SEND_MS = 150000;  // the Cube shows a new programme only after about two minutes
 
 const toMin = (hhmm) => {
   if (hhmm == null) return NaN;
@@ -254,6 +267,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     this._drag = null;
     this._suppressClick = false;
     this._changedDays = new Set();
+    this._holdUntil = 0;
     this._onMove = this._onDragMove.bind(this);
     this._onUp = this._onDragEnd.bind(this);
   }
@@ -357,7 +371,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     const changed =
       !src ||
       DAYS.some((d) => JSON.stringify(src[d] || []) !== JSON.stringify(this._days[d] || []));
-    if (changed && !this._dirty) this._days = normalize(src);
+    if (changed && !this._dirty && Date.now() >= this._holdUntil) this._days = normalize(src);
   }
 
   _periods(day = this._sel.day) {
@@ -381,6 +395,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     if (!p) return;
     p.until = String(v);
     this._dirty = true;
+    this._changedDays.add(this._sel.day);
     this._repaint();
   }
 
@@ -422,6 +437,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     if (i === 0) list[0].until = list[0].until || "24:00";
     this._sel.zone = Math.max(0, i - 1);
     this._dirty = true;
+    this._changedDays.add(this._sel.day);
     this._render();
   }
 
@@ -453,6 +469,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     list.splice(i + 1, 0, { until: newUntil, temp: p.temp });
     this._sel.zone = i + 1;
     this._dirty = true;
+    this._changedDays.add(this._sel.day);
     this._render();
   }
 
@@ -466,6 +483,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     for (const d of this._copyTargets) {
       if (d === this._sel.day) continue;
       this._days[d] = src.map((p) => ({ until: p.until, temp: p.temp }));
+      this._changedDays.add(d);
     }
     this._copyTargets.clear();
     this._dirty = true;
@@ -483,6 +501,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     this._days = normalize(this._hass?.states[this._entity]?.attributes?.schedule);
     this._dirty = false;
     this._changedDays.clear();
+    this._holdUntil = 0;
     this._status = { kind: "info", text: T.changesDiscarded };
     this._render();
   }
@@ -640,17 +659,73 @@ class MaxCubeScheduleCard extends HTMLElement {
 
   // --- writing -------------------------------------------------------------
 
+  _sendDays() {
+    return DAYS.filter((d) => this._changedDays.has(d));
+  }
+
+  // Writes one day to one thermostat and returns the Cube's verdict for it.
+  async _writeDay(entity, day) {
+    const periods = this._periods(day).map((p) => ({ until: p.until, temperature: p.temp }));
+    const res = await this._hass.callService(
+      "maxcube_local",
+      "set_schedule",
+      { days: [day], periods, dry_run: this._dry },
+      { entity_id: entity }
+    );
+    if (this._dry) return "dry-run";
+    const payload = res?.response ?? res ?? {};
+    return payload.result?.[day] || "confirmed";
+  }
+
+  _confirmSend(targets, days) {
+    const telegrams = targets.length * days.length;
+    if (this._dry || (targets.length <= CONFIRM_ABOVE_DEVICES && days.length <= CONFIRM_ABOVE_DAYS)) {
+      return true;
+    }
+    const pct = Math.ceil(telegrams * RADIO_PERCENT_PER_TELEGRAM);
+    return confirm(T.confirmSend(telegrams, targets.length, days.length, pct));
+  }
+
+  _describe(r) {
+    return `${this._name(r.entity)} (${DAY_SHORT[r.day]}${r.detail ? `: ${r.detail}` : ""})`;
+  }
+
+  _summary(results, days, targets, stopped) {
+    const failed = results.filter((r) => r.state === "failed");
+    const unconfirmed = results.filter((r) => r.state === "sent_not_confirmed");
+    const dayNames = days.map((d) => DAY_SHORT[d]).join(", ");
+    if (this._dry && !failed.length) return { kind: "ok", text: T.statusDryRun(dayNames, targets.length) };
+    const parts = [];
+    if (failed.length) {
+      parts.push(T.statusFailed(failed.map((r) => this._describe(r)).join(", ")));
+      if (stopped) parts.push(T.statusStopped);
+    }
+    if (unconfirmed.length) {
+      parts.push(T.statusUnconfirmed(unconfirmed.map((r) => this._describe(r)).join(", ")));
+    }
+    if (!parts.length) return { kind: "ok", text: T.statusSent(dayNames, targets.length) };
+    return { kind: failed.length ? "error" : "warn", text: parts.join(" ") };
+  }
+
   async _send() {
     if (this._busy) return;
-    const targets = [...this._targets].filter((id) => this._hass?.states[id]);
+    const known = this._scheduleEntities();
+    const targets = [...this._targets].filter((id) => known.includes(id));
     if (!targets.length) {
       this._status = { kind: "warn", text: T.noTargetDevice };
       this._render();
       return;
     }
 
-    // Validate all days
-    for (const d of DAYS) {
+    // Only days that were changed are sent; without a change nothing goes over the radio.
+    const days = this._sendDays();
+    if (!days.length) {
+      this._status = { kind: "info", text: T.nothingToSend };
+      this._render();
+      return;
+    }
+
+    for (const d of days) {
       const errs = validateDay(this._periods(d));
       if (errs.length) {
         this._status = { kind: "error", text: T.dayError(DAY_LONG[d], errs) };
@@ -658,68 +733,55 @@ class MaxCubeScheduleCard extends HTMLElement {
         return;
       }
     }
-
-    // Only send days that have been changed (or all if none explicitly changed)
-    const changedDays = this._changedDays.size > 0
-      ? [...this._changedDays]
-      : DAYS;
+    if (!this._confirmSend(targets, days)) return;
 
     this._busy = true;
     this._render();
 
-    const allResults = [];
+    const results = [];
+    let stopped = false;
     try {
       for (const entity of targets) {
-        for (const day of changedDays) {
-          const periods = this._periods(day).map((p) => ({
-            until: p.until,
-            temperature: p.temp,
-          }));
-
-          const res = await this._hass.callService(
-            "maxcube_local",
-            "set_schedule",
-            { days: [day], periods, dry_run: this._dry },
-            { entity_id: entity }
-          );
-          const payload = res?.response ?? res ?? {};
-          const per = payload.result || {};
-          allResults.push({
-            entity,
-            day,
-            // A dry-run is a successful check, not a failure.
-            ok: this._dry ? true : per[day] !== "failed",
-            raw: this._dry ? "dry-run" : per[day] || "ok",
-          });
-        }
-      }
-      const failed = allResults.filter((r) => !r.ok);
-      this._status = {
-        kind: failed.length ? "error" : "ok",
-        text: this._dry
-          ? T.statusDryRun(changedDays.map(d => DAY_SHORT[d]).join(", "), targets.length)
-          : failed.length
-            ? T.statusFailed(failed.map((r) => `${this._name(r.entity)} (${DAY_SHORT[r.day]})`).join(", "))
-            : T.statusSent(changedDays.map(d => DAY_SHORT[d]).join(", "), targets.length),
-        ts: new Date(),
-        results: allResults,
-      };
-      if (!this._dry && !failed.length) {
-        this._dirty = false;
-        this._changedDays.clear();
-        // Ask HA to re-read the Cube so the card shows what was actually stored.
-        setTimeout(() => {
-          for (const entity of targets) {
-            this._hass.callService("homeassistant", "update_entity", { entity_id: entity });
+        for (const day of days) {
+          try {
+            results.push({ entity, day, state: await this._writeDay(entity, day) });
+          } catch (err) {
+            // Stop at the first error: the next telegrams would most likely fail the same way
+            // (radio time used up, Cube unreachable) and only use up more radio time.
+            results.push({ entity, day, state: "failed", detail: String(err?.message || err) });
+            stopped = true;
+            break;
           }
-        }, 1500);
+        }
+        if (stopped) break;
       }
-    } catch (err) {
-      this._status = { kind: "error", text: String(err?.message || err) };
+      this._status = { ...this._summary(results, days, targets, stopped), ts: new Date(), results };
+      if (!this._dry) this._afterSend(results, days, targets);
     } finally {
       this._busy = false;
       this._render();
     }
+  }
+
+  // Forget the days that arrived everywhere; keep the rest marked so a retry sends only those.
+  _afterSend(results, days, targets) {
+    for (const day of days) {
+      const of = results.filter((r) => r.day === day);
+      if (of.length === targets.length && of.every((r) => r.state !== "failed")) {
+        this._changedDays.delete(day);
+      }
+    }
+    this._dirty = this._changedDays.size > 0;
+    if (results.some((r) => r.state === "sent_not_confirmed")) {
+      this._holdUntil = Date.now() + HOLD_AFTER_SEND_MS;
+    }
+    const reached = [...new Set(results.filter((r) => r.state !== "failed").map((r) => r.entity))];
+    // Ask HA to re-read the Cube so the card shows what was actually stored.
+    setTimeout(() => {
+      for (const entity of reached) {
+        this._hass.callService("homeassistant", "update_entity", { entity_id: entity });
+      }
+    }, 1500);
   }
 
   // --- rendering -----------------------------------------------------------
@@ -848,7 +910,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     const rows = (s.results || [])
       .map(
         (r) =>
-          `<li>${r.ok ? "✔" : "✖"} ${esc(this._name(r.entity))} — ${DAY_SHORT[r.day]} (${esc(r.raw)})</li>`
+          `<li>${STATE_ICON[r.state] || "•"} ${esc(this._name(r.entity))} — ${DAY_SHORT[r.day]} (${esc(T.resultState[r.state] || r.state)}${r.detail ? `: ${esc(r.detail)}` : ""})</li>`
       )
       .join("");
     return `<div class="status ${esc(s.kind)}">
@@ -1043,8 +1105,8 @@ class MaxCubeScheduleCard extends HTMLElement {
                     <label class="chk"><input type="checkbox" data-act="dry" ${this._dry ? "checked" : ""}> ${T.dryRun}</label>
                     <span class="spacer"></span>
                     <span class="muted" data-dirty>${this._dirty ? T.unsavedChanges : T.currentState}</span>
-                    <button class="btn" data-act="send" ${this._busy ? "disabled" : ""}>
-                      ${this._busy ? T.sending : T.send(this._getSendLabel())}
+                    <button class="btn" data-act="send" ${this._busy || !this._changedDays.size ? "disabled" : ""}>
+                      ${this._busy ? T.sending : this._sendText()}
                     </button>
                   </div>
                   ${this._renderStatus()}
@@ -1076,6 +1138,15 @@ class MaxCubeScheduleCard extends HTMLElement {
       });
     });
 
+    const sendBtn = this.querySelector('[data-act="send"]');
+    if (sendBtn && !this._busy) {
+      sendBtn.disabled = !this._changedDays.size;
+      sendBtn.textContent = this._sendText();
+    }
+    this.querySelectorAll(".zone").forEach((z) =>
+      z.classList.toggle("changed", this._changedDays.has(z.dataset.day))
+    );
+
     const dirtyEl = this.querySelector("[data-dirty]");
     if (dirtyEl) {
       dirtyEl.textContent = this._dirty ? T.unsavedChanges : T.currentState;
@@ -1090,6 +1161,8 @@ class MaxCubeScheduleCard extends HTMLElement {
         this._entity = b.dataset.ent;
         this._days = normalize(this._hass.states[this._entity]?.attributes?.schedule);
         this._dirty = false;
+        this._changedDays.clear();
+        this._holdUntil = 0;
         this._status = null;
         this._sel = { day: this._sel?.day || "monday", zone: 0 };
         this._saveSel();
@@ -1177,11 +1250,9 @@ class MaxCubeScheduleCard extends HTMLElement {
     if (send) send.addEventListener("click", () => this._send());
   }
 
-  _getSendLabel() {
-    const days = this._changedDays.size > 0
-      ? [...this._changedDays]
-      : DAYS;
-    return days.map(d => DAY_SHORT[d]).join(", ");
+  _sendText() {
+    const days = this._sendDays();
+    return days.length ? T.send(days.map((d) => DAY_SHORT[d]).join(", ")) : T.sendIdle;
   }
 
   getCardSize() {
