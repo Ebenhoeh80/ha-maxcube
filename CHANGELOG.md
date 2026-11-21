@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The minimum Home Assistant version is now 2025.3 because the integration imports `AddConfigEntryEntitiesCallback`, which Home Assistant added in 2025.3.
 - Tests: a fake Cube (synthetic frames) for tests without hardware.
 
+### Fixed
+- A short (5-byte) or window contact (6-byte) entry as the last entry of the Cube's L message no longer drops the link status of all devices.
+- The values of a device with a short or window entry are no longer read from the bytes of the next entry.
+
 ## [1.6.0] - 2026-11-21
 
 ### Added
