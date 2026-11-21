@@ -35,7 +35,7 @@ from .const import (
 )
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .health import BatteryHold
-from .linkstatus import DeviceStatus, LinkStatusMaxCube
+from .linkstatus import LinkStatusMaxCube
 from .snapshot import CubeSnapshot, take_snapshot
 
 _LOGGER = logging.getLogger(__name__)
@@ -344,14 +344,6 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         if self._cube is not None:
             await self.async_cube_call(self._cube.disconnect)
         await self.async_request_refresh()
-
-    def battery_low(self, rf_address: str) -> bool:
-        """Return the held low-battery state of one device as of the last poll (temporary wrapper)."""
-        return bool(self.data.device(rf_address).battery_low)
-
-    def device_status(self, rf_address: str) -> DeviceStatus:
-        """Return the RF link status of one device as of the last poll (temporary wrapper)."""
-        return self.data.device(rf_address).status
 
     def _take_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
         """Copy the Cube into a snapshot; runs in the executor, right after the poll.

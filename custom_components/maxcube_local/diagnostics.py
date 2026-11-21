@@ -21,17 +21,17 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return what helps to find a problem, without addresses or names."""
     coordinator = entry.runtime_data
-    cube = coordinator.cube
+    snapshot = coordinator.data
     devices = []
-    for device in getattr(cube, "devices", []):
-        status = coordinator.device_status(device.rf_address)
+    for state in snapshot.devices.values():
+        status = state.status
         devices.append(
             {
-                "type": device.type,
-                "serial": device.serial,
-                "name": device.name,
-                "battery_low": bool(getattr(device, "battery", 0)),
-                "mode": getattr(device, "mode", None),
+                "type": state.kind,
+                "serial": state.serial,
+                "name": state.name,
+                "battery_low": bool(state.battery_raw),
+                "mode": state.mode,
                 "initialized": status.initialized,
                 "error": status.error,
                 "link_error": status.link_error,
@@ -44,10 +44,10 @@ async def async_get_config_entry_diagnostics(
             "entry": dict(entry.data),
             "options": dict(entry.options),
             "cube": {
-                "serial": getattr(cube, "serial", None),
-                "firmware": getattr(cube, "firmware_version", None),
-                "duty_cycle": getattr(cube, "duty_cycle", None),
-                "free_memory_slots": getattr(cube, "free_memory_slots", None),
+                "serial": snapshot.serial,
+                "firmware": snapshot.firmware_version,
+                "duty_cycle": snapshot.duty_cycle,
+                "free_memory_slots": snapshot.free_memory_slots,
             },
             "last_update_success": coordinator.last_update_success,
             "polls": {
