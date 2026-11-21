@@ -3,105 +3,110 @@ const COMMA_LOCALE = /^(de|fr|es|it|pt|ru|nl|pl|tr|cs|da|sv|fi|no)/.test(
   (typeof navigator !== "undefined" && navigator.language) || "en"
 );
 
-// Translation system
+// Translation system. Every key exists once per language; tests/test_card.py checks that every
+// T.<key> used below exists in both.
 const TRANSLATIONS = {
   de: {
     dayShort: { monday: "Mo", tuesday: "Di", wednesday: "Mi", thursday: "Do", friday: "Fr", saturday: "Sa", sunday: "So" },
     dayLong: { monday: "Montag", tuesday: "Dienstag", wednesday: "Mittwoch", thursday: "Donnerstag", friday: "Freitag", saturday: "Samstag", sunday: "Sonntag" },
-    lastZoneCannotDelete: "Die letzte Zone kann nicht gelöscht werden.",
-    zoneTooShortToSplit: "Zone ist zu kurz zum Teilen.",
-    maxZonesReached: (n) => `Maximal ${n} Zonen pro Tag.`,
-    changesDiscarded: "Änderungen verworfen.",
-    noMaxThermostats: "Keine MAX!-Thermostate mit Wochenprogramm gefunden.",
+    cardName: "MAX! Cube Wochenprogramm",
+    cardDescription: "Wochenprogramm eines MAX!-Heizkörperthermostats bearbeiten und an den Cube senden.",
+    noMaxThermostats: "Keine MAX!-Heizkörperthermostate mit Wochenprogramm gefunden.",
     noThermostatsFound: "keine Thermostate gefunden",
+    zone: "Zone",
+    temperature: "Temperatur",
+    end: "Ende",
+    splitZone: "Zone teilen",
+    deleteZone: "Zone löschen",
+    minusHalf: "−0,5 °C",
+    plusHalf: "+0,5 °C",
+    invalidTime: "ungültige Zeit",
+    changed: "Geändert",
+    revert: "Verwerfen",
+    copyTo: (day) => `${day} kopieren nach`,
+    copy: "Kopieren",
     targetDevices: (n) => `Zielgeräte (${n})`,
-    unsavedChanges: "ungespeicherte Änderungen",
-    currentState: "Stand = Cube",
     dryRun: "Dry-Run",
     sending: "sendet…",
-    sendLabel: (days) => `${days} an Cube senden`,
-    statusDryRun: (days, count) => `Dry-Run: ${days} für ${count} Gerät(e) geprüft.`,
-    statusSent: (days, count) => `${days} an ${count} Gerät(e) gesendet.`,
+    send: (days) => `${days} an Cube senden`,
+    unsavedChanges: "ungespeicherte Änderungen",
+    currentState: "Stand = Cube",
+    discardUnsaved: "Ungespeicherte Änderungen verwerfen?",
+    lastZoneCannotDelete: "Die letzte Zone kann nicht gelöscht werden.",
+    maxZonesReached: (n) => `Maximal ${n} Zonen pro Tag.`,
+    zoneTooShortToSplit: "Zone ist zu kurz zum Teilen.",
+    changesDiscarded: "Änderungen verworfen.",
+    copyNoTargets: "Keine Zieltage ausgewählt.",
+    copyDone: (day) => `${day} auf die gewählten Tage kopiert.`,
+    noTargetDevice: "Kein Zielgerät ausgewählt.",
+    nothingToSend: "Keine Änderungen zum Senden.",
+    confirmSend: (telegrams, devices, days, pct) =>
+      `${telegrams} Funktelegramme an den Cube senden (${devices} Gerät(e) × ${days} Tag(e))?\nGeschätzter Funkzeit-Anteil: ca. ${pct} % (der Cube verweigert Schreiben ab 90 % Auslastung).`,
+    statusDryRun: (days, count) => `Dry-Run: ${days} für ${count} Gerät(e) geprüft, nichts gesendet.`,
+    statusSent: (days, count) => `${days} an ${count} Gerät(e) gesendet und vom Cube bestätigt.`,
+    statusUnconfirmed: (items) => `Gesendet, aber noch nicht bestätigt: ${items}. Der Cube zeigt das neue Programm erst nach etwa zwei Minuten.`,
     statusFailed: (failed) => `Fehlgeschlagen: ${failed}`,
+    statusStopped: "Weitere Telegramme wurden nicht gesendet.",
     dayError: (day, errors) => `${day}: ${errors.join(", ")}`,
     zoneError: (zone, msg) => `Zone ${zone}: ${msg}`,
     noPeriods: "kein Eintrag",
     maxPeriods: (n, actual) => `max. ${n} Zonen (${actual})`,
     timeNotInSteps: (time) => `${time} nicht in 5-Min-Schritten`,
+    scheduleTimeError: (time) => `${time} liegt nicht im 5-Minuten-Raster`,
     timeNotRising: (time) => `${time} nicht aufsteigend`,
-    badTemperature: (time) => `Temperatur ungültig`,
+    tempError: (zone) => `Zone ${zone}: Temperatur ungültig`,
     mustEndAtMidnight: "letzte Zone muss bei 24:00 enden",
-    zoneTooShortToSplit: "Zone ist zu kurz zum Teilen.",
-    maxZonesPerDay: (n) => `Maximal ${n} Zonen pro Tag.`,
-    zoneTooShortToSplitTime: "Zone ist zu kurz zum Teilen.",
-    tempError: (zone, temp) => `Zone ${zone}: Temperatur ungültig`,
-    copyNoTargets: "Keine Zieltage ausgewählt.",
-    copyDone: (day) => `${day} auf die gewählten Tage kopiert.`,
-    copyNoTargetsError: "Keine Zieltage ausgewählt.",
-    copyDoneMessage: (day) => `${day} auf die gewählten Tage kopiert.`,
-    dryRunLabel: "Dry-Run",
-    sendLabel: (days) => `${days} an Cube senden`,
-    unsavedChangesLabel: "ungespeicherte Änderungen",
-    currentStateLabel: "Stand = Cube",
-    targetDevicesLabel: (count) => `Zielgeräte (${count})`,
-    noThermostatsFoundLabel: "keine Thermostate gefunden",
-    copyTargetsLabel: (day) => `${day} kopieren nach`,
-    copyButton: "Kopieren",
-    dryRunLabelShort: "Dry-Run",
-    sendButton: (days) => `${days} an Cube senden`,
-    unsavedChangesShort: "ungespeicherte Änderungen",
-    currentStateShort: "Stand = Cube",
-    dryRunShort: "Dry-Run",
-    revertButton: "Verwerfen",
   },
   en: {
     dayShort: { monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th", friday: "Fr", saturday: "Sa", sunday: "Su" },
     dayLong: { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" },
-    lastZoneCannotDelete: "The last zone cannot be deleted.",
-    zoneTooShortToSplit: "Zone is too short to split.",
-    maxZonesReached: (n) => `Maximum ${n} zones per day.`,
-    changesDiscarded: "Changes discarded.",
-    noMaxThermostats: "No MAX! thermostats with weekly schedule found.",
+    cardName: "MAX! Cube weekly programme",
+    cardDescription: "Edit the weekly programme of a MAX! radiator thermostat and send it to the Cube.",
+    noMaxThermostats: "No MAX! radiator thermostats with a weekly programme found.",
     noThermostatsFound: "no thermostats found",
+    zone: "Zone",
+    temperature: "Temperature",
+    end: "End",
+    splitZone: "Split zone",
+    deleteZone: "Delete zone",
+    minusHalf: "−0.5 °C",
+    plusHalf: "+0.5 °C",
+    invalidTime: "invalid time",
+    changed: "Changed",
+    revert: "Discard",
+    copyTo: (day) => `Copy ${day} to`,
+    copy: "Copy",
     targetDevices: (n) => `Target devices (${n})`,
+    dryRun: "Dry run",
+    sending: "sending…",
+    send: (days) => `Send ${days} to Cube`,
     unsavedChanges: "unsaved changes",
     currentState: "State = Cube",
-    dryRun: "Dry-Run",
-    sending: "sending…",
-    sendLabel: (days) => `${days} to Cube`,
-    statusDryRun: (days, count) => `Dry-Run: ${days} for ${count} device(s) checked.`,
-    statusSent: (days, count) => `${days} sent to ${count} device(s).`,
+    discardUnsaved: "Discard unsaved changes?",
+    lastZoneCannotDelete: "The last zone cannot be deleted.",
+    maxZonesReached: (n) => `Maximum ${n} zones per day.`,
+    zoneTooShortToSplit: "Zone is too short to split.",
+    changesDiscarded: "Changes discarded.",
+    copyNoTargets: "No target days selected.",
+    copyDone: (day) => `${day} copied to the selected days.`,
+    noTargetDevice: "No target device selected.",
+    nothingToSend: "No changes to send.",
+    confirmSend: (telegrams, devices, days, pct) =>
+      `Send ${telegrams} radio telegrams to the Cube (${devices} device(s) × ${days} day(s))?\nEstimated radio time: about ${pct} % (the Cube refuses writes at 90 % duty cycle).`,
+    statusDryRun: (days, count) => `Dry run: ${days} checked for ${count} device(s), nothing sent.`,
+    statusSent: (days, count) => `${days} sent to ${count} device(s) and confirmed by the Cube.`,
+    statusUnconfirmed: (items) => `Sent, but not confirmed yet: ${items}. The Cube shows the new programme only after about two minutes.`,
     statusFailed: (failed) => `Failed: ${failed}`,
+    statusStopped: "No further telegrams were sent.",
     dayError: (day, errors) => `${day}: ${errors.join(", ")}`,
     zoneError: (zone, msg) => `Zone ${zone}: ${msg}`,
     noPeriods: "no entry",
     maxPeriods: (n, actual) => `max. ${n} zones (${actual})`,
     timeNotInSteps: (time) => `${time} not in 5-min steps`,
+    scheduleTimeError: (time) => `${time} is not on the 5-minute grid`,
     timeNotRising: (time) => `${time} not ascending`,
-    badTemperature: (time) => `Temperature invalid`,
+    tempError: (zone) => `Zone ${zone}: temperature invalid`,
     mustEndAtMidnight: "last zone must end at 24:00",
-    zoneTooShortToSplit: "Zone is too short to split.",
-    maxZonesPerDay: (n) => `Maximum ${n} zones per day.`,
-    zoneTooShortToSplitTime: "Zone is too short to split.",
-    tempError: (zone, temp) => `Zone ${zone}: temperature invalid`,
-    copyNoTargets: "No target days selected.",
-    copyDone: (day) => `${day} copied to selected days.`,
-    copyNoTargetsError: "No target days selected.",
-    copyDoneMessage: (day) => `${day} copied to selected days.`,
-    dryRunLabel: "Dry-Run",
-    sendLabel: (days) => `${days} to Cube`,
-    unsavedChangesLabel: "unsaved changes",
-    currentStateLabel: "State = Cube",
-    targetDevicesLabel: (count) => `Target devices (${count})`,
-    noThermostatsFoundLabel: "no thermostats found",
-    copyTargetsLabel: (day) => `Copy ${day} to`,
-    copyButton: "Copy",
-    dryRunLabelShort: "Dry-Run",
-    sendButton: (days) => `${days} to Cube`,
-    unsavedChangesShort: "unsaved changes",
-    currentStateShort: "State = Cube",
-    dryRunShort: "Dry-Run",
-    revertButton: "Discard",
   },
 };
 
@@ -213,7 +218,7 @@ function validateDay(periods) {
   periods.forEach((p, i) => {
     const m = toMin(p.until);
     if (Number.isNaN(m)) {
-      errs.push(T.zoneError(i + 1, "ungültige Zeit"));
+      errs.push(T.zoneError(i + 1, T.invalidTime));
       return;
     }
     if (m % 5) errs.push(T.timeNotInSteps(p.until));
@@ -573,7 +578,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     const p = list[idx];
     const start = idx === 0 ? 0 : toMin(this._days[day][idx - 1]?.until || "00:00");
     const end = toMin(p.until);
-    const label = `${fmt(start)}–${end}: ${fmtTemp(p.temp)} °C`;
+    const label = `${fmt(start)}–${fmt(end)}: ${fmtTemp(p.temp)} °C`;
 
     zoneEl.title = label;
     const t = zoneEl.querySelector(".zt");
@@ -736,7 +741,7 @@ class MaxCubeScheduleCard extends HTMLElement {
             <div class="edge l" data-edge="start"></div>
             <span class="zt">${fmtTemp(p.temp)}°</span>
             <div class="edge r" data-edge="end"></div>
-            ${changed ? '<span class="changed-dot" title="Geändert"></span>' : ""}
+            ${changed ? '<span class="changed-dot" title="${T.changed}"></span>' : ""}
           </div>`;
         })
         .join("");
@@ -773,27 +778,27 @@ class MaxCubeScheduleCard extends HTMLElement {
 
     return `<div class="editor">
       <div class="row">
-        <label>${T.zoneError ? "Zone" : "Zone"} ${idx + 1} / ${list.length}</label>
+        <label>${T.zone} ${idx + 1} / ${list.length}</label>
         <span class="span">${fmt(start)} – ${badTime ? "?" : fmt(end)}</span>
       </div>
       <div class="row">
-        <label>Temperatur</label>
+        <label>${T.temperature}</label>
         <input type="text" class="tin temp" inputmode="decimal" value="${fmtTemp(p.temp)}"
           data-act="temp" spellcheck="false">
         <span class="unit">°C</span>
-        <button class="btn sm" data-act="t-05" title="−0,5">–</button>
-        <button class="btn sm" data-act="t+05" title="+0,5">+</button>
+        <button class="btn sm" data-act="t-05" title="${T.minusHalf}">–</button>
+        <button class="btn sm" data-act="t+05" title="${T.plusHalf}">+</button>
       </div>
       <div class="row">
-        <label>Ende</label>
+        <label>${T.end}</label>
         <input type="text" class="tin time" value="${p.until}" data-act="until" inputmode="numeric"
           placeholder="HH:MM" spellcheck="false">
         ${offGrid ? `<span class="warn">${T.scheduleTimeError(p.until)}</span>` : ""}
       </div>
       <div class="row">
-        <button class="btn" data-act="add" ${list.length >= MAX_ZONES ? "disabled" : ""}>Zone teilen</button>
-        <button class="btn danger" data-act="del" ${list.length <= 1 ? "disabled" : ""}>Zone löschen</button>
-        <button class="btn ghost" data-act="revert">${T.revertButton}</button>
+        <button class="btn" data-act="add" ${list.length >= MAX_ZONES ? "disabled" : ""}>${T.splitZone}</button>
+        <button class="btn danger" data-act="del" ${list.length <= 1 ? "disabled" : ""}>${T.deleteZone}</button>
+        <button class="btn ghost" data-act="revert">${T.revert}</button>
       </div>
     </div>`;
   }
@@ -807,9 +812,9 @@ class MaxCubeScheduleCard extends HTMLElement {
       </label>`
     ).join("");
     return `<div class="block">
-      <div class="bh">${T.copyTargetsLabel(DAY_LONG[this._sel.day])}</div>
+      <div class="bh">${T.copyTo(DAY_LONG[this._sel.day])}</div>
       <div class="cbs">${boxes}</div>
-      <button class="btn" data-act="copy">${T.copyButton}</button>
+      <button class="btn" data-act="copy">${T.copy}</button>
     </div>`;
   }
 
@@ -824,8 +829,8 @@ class MaxCubeScheduleCard extends HTMLElement {
       )
       .join("");
     return `<div class="block">
-      <div class="bh">${T.targetDevicesLabel(this._targets.size)}</div>
-      <div class="cbs targets">${items || `<span class="muted">${T.noThermostatsFoundLabel}</span>`}</div>
+      <div class="bh">${T.targetDevices(this._targets.size)}</div>
+      <div class="cbs targets">${items || `<span class="muted">${T.noThermostatsFound}</span>`}</div>
     </div>`;
   }
 
@@ -1030,11 +1035,11 @@ class MaxCubeScheduleCard extends HTMLElement {
                   ${this._renderCopy()}
                   ${this._renderTargets()}
                   <div class="actions">
-                    <label class="chk"><input type="checkbox" data-act="dry" ${this._dry ? "checked" : ""}> ${T.dryRunLabelShort}</label>
+                    <label class="chk"><input type="checkbox" data-act="dry" ${this._dry ? "checked" : ""}> ${T.dryRun}</label>
                     <span class="spacer"></span>
-                    <span class="muted" data-dirty>${this._dirty ? T.unsavedChangesShort : T.currentStateShort}</span>
+                    <span class="muted" data-dirty>${this._dirty ? T.unsavedChanges : T.currentState}</span>
                     <button class="btn" data-act="send" ${this._busy ? "disabled" : ""}>
-                      ${this._busy ? T.sending : `${this._getSendLabel()} ${T.sendButton("")}`}
+                      ${this._busy ? T.sending : T.send(this._getSendLabel())}
                     </button>
                   </div>
                   ${this._renderStatus()}
@@ -1068,7 +1073,7 @@ class MaxCubeScheduleCard extends HTMLElement {
 
     const dirtyEl = this.querySelector("[data-dirty]");
     if (dirtyEl) {
-      dirtyEl.textContent = this._dirty ? "ungespeicherte Änderungen" : "Stand = Cube";
+      dirtyEl.textContent = this._dirty ? T.unsavedChanges : T.currentState;
       dirtyEl.style.color = this._dirty ? "var(--warning-color, #ff9800)" : "";
     }
   }
@@ -1076,7 +1081,7 @@ class MaxCubeScheduleCard extends HTMLElement {
   _wire() {
     this.querySelectorAll(".tab").forEach((b) =>
       b.addEventListener("click", () => {
-        if (this._dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+        if (this._dirty && !confirm(T.discardUnsaved)) return;
         this._entity = b.dataset.ent;
         this._days = normalize(this._hass.states[this._entity]?.attributes?.schedule);
         this._dirty = false;
@@ -1184,7 +1189,6 @@ customElements.define("maxcube-schedule-card", MaxCubeScheduleCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "maxcube-schedule-card",
-  name: "MAX! Cube Wochenprogramm",
-  description:
-    "Wochenprogramm eines MAX!-Thermostats bearbeiten und an den Cube senden (get_schedule/set_schedule).",
+  name: T.cardName,
+  description: T.cardDescription,
 });
