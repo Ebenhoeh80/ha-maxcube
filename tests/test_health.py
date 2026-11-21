@@ -58,3 +58,35 @@ def test_an_unknown_value_changes_nothing() -> None:
     assert not watch.update(None, 0)
     watch.update(95, 1)
     assert watch.update(None, 2)
+
+
+def test_a_low_battery_is_held_after_the_cube_stops_reporting_it() -> None:
+    hold = health.BatteryHold(hold=900)
+    assert hold.update("a", True, 0) is True
+    assert hold.update("a", False, 300) is True  # a gap of five minutes: still low
+    assert hold.update("a", True, 360) is True  # it comes back, the clock starts again
+    assert hold.update("a", False, 360 + 899) is True
+    assert hold.update("a", False, 360 + 900) is False  # clear for the whole hold time
+    assert hold.update("a", False, 360 + 901) is False
+
+
+def test_a_battery_that_was_never_low_is_not_held() -> None:
+    hold = health.BatteryHold(hold=900)
+    assert hold.update("a", False, 0) is False
+    assert hold.update("b", False, 10) is False
+
+
+def test_the_hold_is_kept_per_device() -> None:
+    hold = health.BatteryHold(hold=900)
+    assert hold.update("a", True, 0) is True
+    assert hold.update("b", False, 100) is False
+    assert hold.update("a", False, 100) is True
+
+
+def test_find_problems_can_take_the_held_battery_state() -> None:
+    findings = health.find_problems(
+        [device("a", battery=0), device("b", battery=0)],
+        lambda _: NS(error=False),
+        battery_low=lambda rf: rf == "a",
+    )
+    assert [(f.kind, f.rf_address) for f in findings] == [(health.ISSUE_BATTERY, "a")]
