@@ -230,6 +230,10 @@ class FakeCube:
     def devices_by_room(self, room: MaxRoom) -> list[Any]:
         return [device for device in self.devices if device.room_id == room.id]
 
+    def device_by_rf(self, rf: str) -> Any:  # noqa: ANN401
+        """The device with this RF address, exactly as the library matches it, or ``None``."""
+        return next((device for device in self.devices if device.rf_address == rf), None)
+
     def write_day_schedule(self, thermostat: Any, day: str, slots: list[dict[str, Any]]) -> bool:
         self.written.append((thermostat.rf_address, day, slots))
         if self.accept_writes and self.store_writes:
