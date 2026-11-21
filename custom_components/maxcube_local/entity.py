@@ -93,7 +93,9 @@ class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):
         self._rf_address = state.rf_address
 
         snapshot = coordinator.data
-        suggested_area = snapshot.room_names.get(state.room_id) if state.room_id else None
+        suggested_area = (
+            snapshot.room_names.get(state.room_id) if state.room_id else None
+        )
         info = DeviceInfo(
             identifiers={(DOMAIN, state.rf_address)},
             name=state.name or f"MAX! {state.rf_address}",
