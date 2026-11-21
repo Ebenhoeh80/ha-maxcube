@@ -13,6 +13,7 @@ import base64
 import binascii
 
 from maxcube.cube import MaxCube
+from maxcube.device import MAX_DEVICE_MODE_AUTOMATIC, MAX_DEVICE_MODE_MANUAL, MaxDevice
 from maxcube.thermostat import MaxThermostat
 
 from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
@@ -20,6 +21,34 @@ from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
 _DUTY_CYCLE_FIELD = 5
 _FREE_SLOTS_FIELD = 6
 _MAX_DUTY_CYCLE = 100  # percent
+# An L entry needs its length byte and the three address bytes.
+_MIN_L_ENTRY_LENGTH = 4
+# Offsets in an L entry, counted from the length byte (see ``_apply_l_entry``).
+_L_BITS2 = 6
+_L_VALVE = 7
+_L_SETPOINT = 8
+_L_ACTUAL_HIGH = 9
+_L_ACTUAL_LOW = 10
+_L_WALL_ACTUAL_LOW = 12
+
+
+def split_l_entries(data: bytes) -> list[bytes]:
+    """Split the bytes of an ``L`` message into device entries, each limited by its own length byte.
+
+    The length byte counts the bytes after itself, so an entry covers ``length + 1`` bytes. Entries
+    that are too short for an address, or that run past the end of the message, are left out. The
+    library does not limit its reads like this: a short last entry makes it read past the end and
+    raise, which drops the status of every device in the message.
+    """
+    entries = []
+    pos = 0
+    while pos < len(data):
+        end = pos + data[pos] + 1
+        if data[pos] < _MIN_L_ENTRY_LENGTH or end > len(data):
+            break
+        entries.append(data[pos:end])
+        pos = end
+    return entries
 
 
 def _hex_field(tokens: list[str], index: int) -> int | None:
@@ -78,3 +107,92 @@ class MaxCubeWithStatus(MaxCube):
         """Parse the H message as the library does, and keep the Cube's status values."""
         super().parse_h_message(message)
         self.duty_cycle, self.free_memory_slots = parse_h_status(message)
+
+    def parse_l_message(self, message: str) -> None:
+        """Parse the L message entry by entry; every value is read within its own entry.
+
+        Replaces the library's loop, which reads bytes +5 and +6 of every entry and, for thermostats,
+        up to +10, even when the entry is shorter (length byte 4 or 5). Those reads land in the next
+        entry or past the end of the message. A value that an entry does not carry is set to ``None``
+        (unknown), not taken from a neighbouring entry.
+        """
+        try:
+            data = base64.b64decode(message)
+        except (binascii.Error, ValueError):
+            return
+        for entry in split_l_entries(data):
+            device = self.device_by_rf(self.parse_rf_address(entry[1:4]))
+            if device is not None:
+                self._apply_l_entry(device, entry)
+
+    def _apply_l_entry(self, device: MaxDevice, entry: bytes) -> None:
+        """Set the values of one device from its L entry.
+
+        Offsets count from the length byte. Bits2 (+6, mode in bits 1-0, battery low in bit 7) exists
+        only if the length byte is 6 or more. An entry with length byte 4 (5 bytes, address only)
+        and one with length byte 5 (6 bytes, e.g. a window contact, bits1 at +5 but no bits2) leave
+        mode, battery and valve unknown (``None``). Offsets as in the library's ``parse_l_message``.
+        """
+        has_bits2 = len(entry) > _L_BITS2
+        device.battery = self.resolve_device_battery(entry[_L_BITS2]) if has_bits2 else None
+        if device.is_thermostat():
+            _apply_thermostat_values(self, device, entry)
+        elif device.is_wallthermostat():
+            _apply_wall_thermostat_values(self, device, entry)
+        elif device.is_windowshutter():
+            _apply_window_value(device, entry)
+
+
+def _apply_setpoint_and_mode(cube: MaxCubeWithStatus, device: MaxDevice, entry: bytes) -> None:
+    """Set the mode and target temperature of a thermostat or wall thermostat."""
+    has_bits2 = len(entry) > _L_BITS2
+    device.mode = cube.resolve_device_mode(entry[_L_BITS2]) if has_bits2 else None
+    has_setpoint = len(entry) > _L_SETPOINT
+    device.target_temperature = (entry[_L_SETPOINT] & 0x7F) / 2.0 if has_setpoint else None
+
+
+def _apply_thermostat_values(cube: MaxCubeWithStatus, device: MaxDevice, entry: bytes) -> None:
+    """Set the values of a radiator thermostat: valve, setpoint, mode and actual temperature.
+
+    The actual temperature is at +9/+10 (big endian, tenths of a degree, 0 = none). The library
+    sets it only in auto and manual mode and this code does the same: in boost or vacation mode
+    the library sets ``actual_temperature`` to ``None``. The public description of the L message
+    (Bouni, max-cube-protocol, ``L-Message.md``) names +9/+10 "date until" for the set temperature
+    and says the actual temperature is "sometimes" there in auto mode. No real Cube has confirmed
+    what +9/+10 hold in boost or vacation, so they are not read there.
+    """
+    _apply_setpoint_and_mode(cube, device, entry)
+    device.valve_position = entry[_L_VALVE] if len(entry) > _L_VALVE else None
+    device.actual_temperature = _thermostat_actual_temperature(entry, device.mode)
+
+
+def _apply_wall_thermostat_values(cube: MaxCubeWithStatus, device: MaxDevice, entry: bytes) -> None:
+    """Set the values of a wall thermostat: setpoint, mode and actual temperature.
+
+    The actual temperature has a high bit (+8, bit 7) and a low byte (+12), in tenths of a degree.
+    """
+    _apply_setpoint_and_mode(cube, device, entry)
+    if len(entry) > _L_WALL_ACTUAL_LOW:
+        high = (entry[_L_SETPOINT] & 0x80) << 1
+        device.actual_temperature = (high + entry[_L_WALL_ACTUAL_LOW]) / 10.0
+    else:
+        device.actual_temperature = None
+
+
+def _apply_window_value(device: MaxDevice, entry: bytes) -> None:
+    """Set ``is_open`` of a window contact from bits2 (+6, bits 1-0).
+
+    Only an entry with length byte 6 or more carries bits2. A shorter one leaves ``is_open`` as it is.
+    """
+    if len(entry) > _L_BITS2:
+        device.is_open = (entry[_L_BITS2] & 0x03) > 0
+
+
+def _thermostat_actual_temperature(entry: bytes, mode: int | None) -> float | None:
+    """Return the actual temperature of a thermostat entry, or ``None`` where the library reads none."""
+    if mode not in (MAX_DEVICE_MODE_AUTOMATIC, MAX_DEVICE_MODE_MANUAL):
+        return None
+    if len(entry) <= _L_ACTUAL_LOW:
+        return None
+    tenths = entry[_L_ACTUAL_HIGH] * 256 + entry[_L_ACTUAL_LOW]
+    return tenths / 10.0 if tenths else None

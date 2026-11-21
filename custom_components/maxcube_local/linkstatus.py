@@ -60,7 +60,7 @@ from datetime import UTC, datetime
 
 from maxcube.cube import DEFAULT_PORT
 
-from .cube import MaxCubeWithStatus
+from .cube import MaxCubeWithStatus, split_l_entries
 
 # bits1 (offset +5)
 BIT_INITIALIZED = 1 << 1
@@ -70,10 +70,8 @@ BIT_ERROR = 1 << 3
 BIT_LINK_ERROR = 1 << 6
 
 # The library never flags a submessage shorter than this as malformed; it just
-# indexes into it.  Six bytes are the minimum that carries both flag bytes.
+# indexes into it.  A length byte of 6 is the minimum that carries bits2 (offset +6).
 MIN_SUBMESSAGE_LENGTH = 6
-# An entry needs at least its length byte and the three bytes of the radio address.
-_MIN_ENTRY_LENGTH = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,29 +118,28 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
         # Decode first: the library's own parse raises on malformed base64, and
         # that exception must not escape this override.
         try:
-            data = bytearray(base64.b64decode(message))
+            data = base64.b64decode(message)
         except (binascii.Error, ValueError):
             return
 
         super().parse_l_message(message)
 
         stamp = datetime.now(UTC)
-        pos = 0
-        while pos < len(data):
-            length = data[pos]
-            if length < _MIN_ENTRY_LENGTH or pos + length >= len(data):
-                break
-            rf_address = self.parse_rf_address(data[pos + 1 : pos + 4])
+        for entry in split_l_entries(data):
+            rf_address = self.parse_rf_address(entry[1:4])
             self.last_heard[rf_address] = stamp
-            if length >= MIN_SUBMESSAGE_LENGTH:
-                bits1 = data[pos + 5]
-                bits2 = data[pos + 6]
+            if entry[0] >= MIN_SUBMESSAGE_LENGTH:
+                bits1 = entry[5]
+                bits2 = entry[6]
                 self.initialized[rf_address] = bool(bits1 & BIT_INITIALIZED)
                 self.device_error[rf_address] = bool(bits1 & BIT_ERROR)
                 self.link_error[rf_address] = bool(bits2 & BIT_LINK_ERROR)
                 # The bit layout is empirical (see the module docstring); keep the raw bytes for diagnosis.
                 self.raw_flags[rf_address] = f"{bits1:02x}{bits2:02x}"
-            pos += length + 1
+            else:
+                # No flag bytes in this entry: forget flags from an earlier frame.
+                for flags in (self.initialized, self.device_error, self.link_error, self.raw_flags):
+                    flags.pop(rf_address, None)
 
     def device_status(self, rf_address: str, stale_after: float) -> DeviceStatus:
         """Return the cached status for one device.
