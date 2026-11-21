@@ -54,3 +54,11 @@ def test_user_facing_text_is_not_hard_coded() -> None:
     """German words in templates would show up in the English interface."""
     outside_translations = SOURCE[SOURCE.index("const LANG") :]
     assert not re.search(r"[äöüÄÖÜß]", outside_translations)
+
+
+def test_dynamic_values_are_escaped_before_they_reach_innerhtml() -> None:
+    assert "const esc = " in SOURCE
+    for risky in ("${p.until}", "${errs.join", "${s.text}"):
+        assert risky not in SOURCE, f"{risky} is written to HTML without esc()"
+    # names are free text from Home Assistant: every template use goes through esc()
+    assert SOURCE.count("esc(this._name(") >= 3

@@ -146,6 +146,11 @@ const fmt = (mins) => {
 const snap = (mins, step = SNAP) => Math.round(mins / step) * step;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+// Everything that comes from outside (friendly names, entity ids, typed values, error texts)
+// is escaped before it is written into innerHTML.
+const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ESCAPES[c]);
+
 const fmtTemp = (t) => {
   const s = String(t);
   return COMMA_LOCALE ? s.replace(".", ",") : s;
@@ -259,7 +264,7 @@ class MaxCubeScheduleCard extends HTMLElement {
 
   setConfig(config) {
     this._config = config || {};
-    this._size = this._config.size || "medium";
+    this._size = ["small", "medium", "large"].includes(this._config.size) ? this._config.size : "medium";
     const saved = this._loadSel();
     if (this._config.entity) this._entity = this._config.entity;
     else if (saved.entity) this._entity = saved.entity;
@@ -737,7 +742,7 @@ class MaxCubeScheduleCard extends HTMLElement {
           const label = `${fmt(start)}–${valid ? fmt(end) : "?"}: ${fmtTemp(p.temp)} °C`;
           const changed = this._changedDays.has(day);
           return `<div class="zone${sel ? " sel" : ""}${changed ? " changed" : ""}" data-day="${day}" data-zone="${i}"
-            style="width:${w}%;background:${tempColor(p.temp)}" title="${label}">
+            style="width:${w}%;background:${tempColor(p.temp)}" title="${esc(label)}">
             <div class="edge l" data-edge="start"></div>
             <span class="zt">${fmtTemp(p.temp)}°</span>
             <div class="edge r" data-edge="end"></div>
@@ -762,7 +767,7 @@ class MaxCubeScheduleCard extends HTMLElement {
   _dayStatus(day) {
     const errs = validateDay(this._periods(day));
     if (!errs.length) return "";
-    return `<span class="bad" title="${errs.join(", ")}">!</span>`;
+    return `<span class="bad" title="${esc(errs.join(", "))}">!</span>`;
   }
 
   _renderEditor() {
@@ -791,9 +796,9 @@ class MaxCubeScheduleCard extends HTMLElement {
       </div>
       <div class="row">
         <label>${T.end}</label>
-        <input type="text" class="tin time" value="${p.until}" data-act="until" inputmode="numeric"
+        <input type="text" class="tin time" value="${esc(p.until)}" data-act="until" inputmode="numeric"
           placeholder="HH:MM" spellcheck="false">
-        ${offGrid ? `<span class="warn">${T.scheduleTimeError(p.until)}</span>` : ""}
+        ${offGrid ? `<span class="warn">${esc(T.scheduleTimeError(p.until))}</span>` : ""}
       </div>
       <div class="row">
         <button class="btn" data-act="add" ${list.length >= MAX_ZONES ? "disabled" : ""}>${T.splitZone}</button>
@@ -823,8 +828,8 @@ class MaxCubeScheduleCard extends HTMLElement {
     const items = ids
       .map(
         (id) => `<label class="cb${this._targets.has(id) ? " on" : ""}">
-        <input type="checkbox" data-target="${id}" ${this._targets.has(id) ? "checked" : ""}>
-        ${this._name(id)}
+        <input type="checkbox" data-target="${esc(id)}" ${this._targets.has(id) ? "checked" : ""}>
+        ${esc(this._name(id))}
       </label>`
       )
       .join("");
@@ -843,11 +848,11 @@ class MaxCubeScheduleCard extends HTMLElement {
     const rows = (s.results || [])
       .map(
         (r) =>
-          `<li>${r.ok ? "✔" : "✖"} ${this._name(r.entity)} — ${DAY_SHORT[r.day]} (${r.raw})</li>`
+          `<li>${r.ok ? "✔" : "✖"} ${esc(this._name(r.entity))} — ${DAY_SHORT[r.day]} (${esc(r.raw)})</li>`
       )
       .join("");
-    return `<div class="status ${s.kind}">
-      <div>${s.text}${ts ? ` <span class="muted">· ${ts}</span>` : ""}</div>
+    return `<div class="status ${esc(s.kind)}">
+      <div>${esc(s.text)}${ts ? ` <span class="muted">· ${ts}</span>` : ""}</div>
       ${rows ? `<ul>${rows}</ul>` : ""}
     </div>`;
   }
@@ -856,7 +861,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     const ids = this._scheduleEntities();
 
     if (!ids.length) {
-      this.innerHTML = `<ha-card><div class="pad">${T.noMaxThermostats}</div></ha-card>`;
+      this.innerHTML = `<ha-card><div class="pad">${esc(T.noMaxThermostats)}</div></ha-card>`;
       return;
     }
     if (!this._days) this._syncFromState();
@@ -873,7 +878,7 @@ class MaxCubeScheduleCard extends HTMLElement {
     const tabs = ids
       .map(
         (id) =>
-          `<button class="tab${id === this._entity ? " active" : ""}" data-ent="${id}">${this._name(id)}</button>`
+          `<button class="tab${id === this._entity ? " active" : ""}" data-ent="${esc(id)}">${esc(this._name(id))}</button>`
       )
       .join("");
 
