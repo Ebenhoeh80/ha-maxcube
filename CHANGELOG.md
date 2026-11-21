@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-21
+
 ### Added
 - `maxcube_local.set_schedule` takes `by_day`: its own periods for each day, instead of one list of periods for all the
   days in `days`. The old form (`days` and `periods`) works as before.
