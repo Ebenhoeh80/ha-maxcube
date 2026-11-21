@@ -17,7 +17,16 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 
-from .conftest import CUBE_SERIAL, DAY, HOST, RADIATOR, WALL, WINDOW, FakeCube
+from .conftest import (
+    CUBE_SERIAL,
+    DAY,
+    HOST,
+    RADIATOR,
+    WALL,
+    WINDOW,
+    FakeCube,
+    device_for_identifier,
+)
 
 NEW_HOST = "192.168.10.99"
 NO_CUBES_FOUND = ("custom_components.maxcube_local.coordinator.discover_cubes", [])
@@ -53,9 +62,7 @@ async def test_setup_creates_the_entities_and_the_hub_device(
         ("binary_sensor", f"{CUBE_SERIAL}_connectivity"),
     ):
         assert _entity_id(hass, domain, unique_id)
-    hub = dr.async_get(hass).async_get_device_by_identifier(
-        (DOMAIN, CUBE_SERIAL), config_entry.entry_id
-    )
+    hub = device_for_identifier(hass, (DOMAIN, CUBE_SERIAL), config_entry.entry_id)
     assert hub is not None
     assert hub.sw_version == "01.13"
 
@@ -575,20 +582,19 @@ async def test_a_device_that_left_the_cube_is_removed_but_an_empty_list_is_not_t
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
     await _setup(hass, config_entry)
-    registry = dr.async_get(hass)
-    assert registry.async_get_device_by_identifier((DOMAIN, WINDOW), config_entry.entry_id) is not None
+    assert device_for_identifier(hass, (DOMAIN, WINDOW), config_entry.entry_id) is not None
 
     gone = cube.devices.pop()  # the window contact
     assert gone.rf_address == WINDOW
     await config_entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
-    assert registry.async_get_device_by_identifier((DOMAIN, WINDOW), config_entry.entry_id) is None
-    assert registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id) is not None
+    assert device_for_identifier(hass, (DOMAIN, WINDOW), config_entry.entry_id) is None
+    assert device_for_identifier(hass, (DOMAIN, RADIATOR), config_entry.entry_id) is not None
 
     cube.devices.clear()  # a failed read must not wipe the registry
     await config_entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
-    assert registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id) is not None
+    assert device_for_identifier(hass, (DOMAIN, RADIATOR), config_entry.entry_id) is not None
 
 
 async def test_the_user_may_delete_only_a_device_the_cube_no_longer_lists(
@@ -598,7 +604,7 @@ async def test_the_user_may_delete_only_a_device_the_cube_no_longer_lists(
 
     await _setup(hass, config_entry)
     registry = dr.async_get(hass)
-    present = registry.async_get_device_by_identifier((DOMAIN, RADIATOR), config_entry.entry_id)
+    present = device_for_identifier(hass, (DOMAIN, RADIATOR), config_entry.entry_id)
     assert not await async_remove_config_entry_device(hass, config_entry, present)
 
     orphan = registry.async_get_or_create(

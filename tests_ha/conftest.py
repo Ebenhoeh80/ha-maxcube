@@ -17,6 +17,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from maxcube.device import (
     MAX_DEVICE_MODE_MANUAL,
     MAX_THERMOSTAT,
@@ -45,6 +46,24 @@ DAY = [
     {"until": "08:00", "temp": 21.5},
     {"until": "24:00", "temp": 17.0},
 ]
+
+
+def device_config_entries(device: dr.DeviceEntry) -> set[str]:
+    """The config entries a device belongs to (a set in 2025.3, ``config_entry_id`` in newer versions)."""
+    if hasattr(device, "config_entry_id"):
+        return {device.config_entry_id}
+    return set(device.config_entries)  # type: ignore[attr-defined]
+
+
+def device_for_identifier(
+    hass: HomeAssistant, identifier: tuple[str, str], entry_id: str
+) -> dr.DeviceEntry | None:
+    """The device with this identifier that belongs to the entry (newer than 2025.3: by_identifier)."""
+    registry = dr.async_get(hass)
+    if hasattr(registry, "async_get_device_by_identifier"):
+        return registry.async_get_device_by_identifier(identifier, entry_id)
+    device = registry.async_get_device(identifiers={identifier})
+    return device if device is not None and entry_id in device_config_entries(device) else None
 
 
 @pytest.fixture(autouse=True)

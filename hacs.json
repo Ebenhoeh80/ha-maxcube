@@ -1,6 +1,6 @@
 {
   "name": "eQ-3 MAX! Cube",
-  "homeassistant": "2024.11.0",
+  "homeassistant": "2025.3.0",
   "render_readme": true,
   "zip_release": true,
   "filename": "maxcube_local.zip"
