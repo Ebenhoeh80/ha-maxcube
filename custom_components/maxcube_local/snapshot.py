@@ -126,6 +126,5 @@ def _freeze_schedule(schedule: Mapping[str, list[dict[str, Any]]] | None) -> Sch
 def schedule_as_dict(schedule: Schedule) -> dict[str, list[dict[str, Any]]]:
     """Return a fresh copy of a snapshot programme in the shape the services and attributes use."""
     return {
-        day: [{"until": until, "temp": temp} for until, temp in slots]
-        for day, slots in schedule
+        day: [{"until": until, "temp": temp} for until, temp in slots] for day, slots in schedule
     }

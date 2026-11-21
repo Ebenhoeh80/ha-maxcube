@@ -40,7 +40,9 @@ def connect(fake: FakeCube) -> LinkStatusMaxCube:
     return linked
 
 
-def snapshot_of(cube: LinkStatusMaxCube, battery_low: dict[str, bool] | None = None) -> CubeSnapshot:
+def snapshot_of(
+    cube: LinkStatusMaxCube, battery_low: dict[str, bool] | None = None
+) -> CubeSnapshot:
     return take_snapshot(cube, STALE_AFTER, battery_low or {})
 
 
@@ -81,15 +83,25 @@ def test_a_new_snapshot_after_a_poll_shows_the_new_values() -> None:
 def test_the_device_values_and_the_cube_values_are_copied() -> None:
     with FakeCube() as fake:
         fake.add_room(1, "Living room")
-        fake.add_device(RADIATOR, "Radiator", setpoint=21.5, actual=19.0, valve=35, battery_low=True)
+        fake.add_device(
+            RADIATOR, "Radiator", setpoint=21.5, actual=19.0, valve=35, battery_low=True
+        )
         fake.set_duty_cycle(12, free_slots=40)
         cube = connect(fake)
         snap = snapshot_of(cube, {RADIATOR: True})
 
     state = snap.device(RADIATOR)
-    assert (state.name, state.room_id, state.serial) == ("Radiator", 1, cube.device_by_rf(RADIATOR).serial)
+    assert (state.name, state.room_id, state.serial) == (
+        "Radiator",
+        1,
+        cube.device_by_rf(RADIATOR).serial,
+    )
     assert state.kind == cube.device_by_rf(RADIATOR).type
-    assert (state.target_temperature, state.actual_temperature, state.valve_position) == (21.5, 19.0, 35)
+    assert (state.target_temperature, state.actual_temperature, state.valve_position) == (
+        21.5,
+        19.0,
+        35,
+    )
     assert state.battery_low is True
     assert state.status.initialized is True
     assert state.status.stale is False
@@ -101,7 +113,9 @@ def test_the_weekly_programme_is_an_immutable_copy_with_the_same_content() -> No
     schedule = {"monday": [{"until": "06:00", "temp": 17.5}, {"until": "24:00", "temp": 20.0}]}
     with FakeCube() as fake:
         fake.add_room(1, "Living room")
-        fake.add_device(RADIATOR, "Radiator", schedule={"monday": [("06:00", 17.5), ("24:00", 20.0)]})
+        fake.add_device(
+            RADIATOR, "Radiator", schedule={"monday": [("06:00", 17.5), ("24:00", 20.0)]}
+        )
         cube = connect(fake)
         snap = snapshot_of(cube)
 

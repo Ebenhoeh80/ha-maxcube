@@ -36,6 +36,7 @@ from .const import (
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .health import BatteryHold
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
+from .snapshot import CubeSnapshot, take_snapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,8 +53,12 @@ class WrongCubeError(OSError):
     """A different Cube than the one of this entry answers at the saved address."""
 
 
-class MaxCubeCoordinator(DataUpdateCoordinator[None]):
-    """Owns the blocking MaxCube object and refreshes it in the executor."""
+class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
+    """Owns the blocking MaxCube object and refreshes it in the executor.
+
+    ``data`` is the snapshot of the last successful poll (see ``snapshot.py``): entities read
+    only that, never the library objects, which the next poll changes in the executor.
+    """
 
     config_entry: MaxCubeConfigEntry
 
@@ -146,16 +151,15 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             self._adopt_host(new_host)
             self._cube = await self.hass.async_add_executor_job(self._connect)
 
-    async def _async_update_data(self) -> None:
-        """Refresh all device states from the Cube."""
+    async def _async_update_data(self) -> CubeSnapshot:
+        """Refresh all device states from the Cube and return the snapshot of this poll."""
         if self._cube is None:
             self._cube = await self.hass.async_add_executor_job(self._connect)
-            self._update_battery(self._cube)
-            return
+            return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
         try:
             await self._async_poll(self._cube)
             self._check_identity(self._cube)
-            self._update_battery(self._cube)
+            return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
@@ -346,13 +350,18 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         """Return whether a device's battery counts as low (held after the Cube stops reporting it)."""
         return self._battery_low.get(rf_address, False)
 
-    def _update_battery(self, cube: LinkStatusMaxCube) -> None:
-        """Take the low-battery flags of the last poll into the held state."""
+    def _take_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
+        """Take the low-battery flags of the last poll into the held state, then copy the Cube.
+
+        Runs in the executor, right after the poll, so the copy is made before the next poll can
+        change the library objects.
+        """
         now = dt_util.utcnow().timestamp()
         for device in cube.devices:
             self._battery_low[device.rf_address] = self._battery_hold.update(
                 device.rf_address, bool(getattr(device, "battery", 0)), now
             )
+        return take_snapshot(cube, self.stale_after, self._battery_low)
 
     def device_status(self, rf_address: str) -> DeviceStatus:
         """Return the RF link status for one device.
