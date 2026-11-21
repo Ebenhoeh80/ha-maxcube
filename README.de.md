@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/default)
 [![GitHub Release](https://img.shields.io/github/v/release/Ebenhoeh80/ha-maxcube)](https://github.com/Ebenhoeh80/ha-maxcube/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.11+-41BDF5.svg?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.3+-41BDF5.svg?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 [![Spenden via PayPal](https://img.shields.io/badge/❤%20Spenden-PayPal-00457C.svg?logo=paypal&logoColor=white)](https://www.paypal.com/pool/9p84qTHCFr?sr=wccr)
 
 [English](README.md) | [Deutsch](README.de.md)
@@ -109,7 +109,7 @@ Dry-Run-Option lässt sich ein Programm prüfen, ohne es zu senden. Die Karte st
 ## 📦 Voraussetzungen
 
 - Ein **eQ-3 MAX! Cube LAN-Gateway**, im Netzwerk erreichbar (Standard-Port `62910`).
-- Home Assistant **2024.11** oder neuer.
+- Home Assistant **2025.3** oder neuer.
 
 ---
 

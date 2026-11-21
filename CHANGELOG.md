@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The minimum Home Assistant version is now 2025.3 because the integration imports `AddConfigEntryEntitiesCallback`, which Home Assistant added in 2025.3.
+
 ## [1.6.0] - 2026-11-21
 
 ### Added
