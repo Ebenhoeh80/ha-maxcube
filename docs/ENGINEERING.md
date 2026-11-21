@@ -51,6 +51,8 @@ measured, with date and method. Last updated: 2026-11-20 (after release 1.3.2).
 | Command cannot reach the Cube, or is refused | the user action fails | translated `HomeAssistantError` (`cube_unreachable`, `command_rejected`) |
 | Device removed from the Cube | stale device in Home Assistant | removed from the registry after the next reload or restart (the library only adds devices) |
 | Empty device list after a failed read | would wipe the registry | an empty list is never trusted |
+| **Low-battery flag comes and goes** (observed 2026-11-20: gaps of 1 to 5 minutes for hours on one thermostat) | the sensor and the repair hint flap; an automation with "on for 30 minutes" cannot fire | the report is held for 15 minutes after the last time the Cube sent it (`BatteryHold`) |
+| **After a battery change the Cube keeps the device in error for hours** (observed 2026-11-21: `Error` from 09:41 to 11:02, "not initialized" flickering until 13:12) | the status sensors and the repair hint stay on although the thermostat works | none possible: the Cube sets and clears the flags itself while it sets the thermostat up again; the hint text says so |
 
 ## 4. Where the time goes (measured)
 
