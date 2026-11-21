@@ -179,6 +179,80 @@ def test_a_short_dead_telegram_does_not_crash() -> None:
     assert healthy.target_temperature == 21.0
 
 
+def test_a_short_telegram_as_last_entry_keeps_the_other_devices() -> None:
+    with FakeCube() as fake:
+        fake.add_room(1, "Living room")
+        fake.add_device(
+            "0A1B01",
+            "Healthy thermostat",
+            mode=MODE_MANUAL,
+            valve=55,
+            setpoint=21.0,
+            actual=20.0,
+            initialized=False,
+            error=True,
+        )
+        fake.add_device("0A1B02", "Dead thermostat", short_telegram=True)
+        linked = connect(fake)
+
+    healthy = device_at(linked, "0A1B01")
+    assert (healthy.valve_position, healthy.target_temperature) == (55, 21.0)
+    healthy_status = linked.device_status("0A1B01", STALE_AFTER)
+    assert (healthy_status.initialized, healthy_status.error, healthy_status.link_error) == (
+        False,
+        True,
+        False,
+    )
+
+    # The 5-byte entry carries only the address: the measured values are unknown, not garbage.
+    dead = device_at(linked, "0A1B02")
+    assert (dead.valve_position, dead.target_temperature, dead.actual_temperature) == (None,) * 3
+    assert (dead.mode, dead.battery) == (None, None)
+    dead_status = linked.device_status("0A1B02", STALE_AFTER)
+    assert dead_status.last_heard is not None
+    assert dead_status.stale is False
+    assert (
+        dead_status.initialized,
+        dead_status.error,
+        dead_status.link_error,
+        dead_status.raw_flags,
+    ) == (None,) * 4
+
+
+def test_a_window_contact_as_last_entry_keeps_the_other_devices() -> None:
+    with FakeCube() as fake:
+        fake.add_room(1, "Living room")
+        fake.add_device(
+            "0A1B01",
+            "Thermostat",
+            mode=MODE_MANUAL,
+            valve=40,
+            setpoint=19.5,
+            actual=18.5,
+            initialized=False,
+            error=True,
+        )
+        fake.add_device("0A1B02", "Window", kind="window")
+        linked = connect(fake)
+
+    thermostat = device_at(linked, "0A1B01")
+    assert (thermostat.valve_position, thermostat.target_temperature) == (40, 19.5)
+    status = linked.device_status("0A1B01", STALE_AFTER)
+    assert (status.initialized, status.error, status.link_error) == (False, True, False)
+
+    # A 6-byte contact has no status byte inside its entry, so it is not read from the next entry.
+    window = device_at(linked, "0A1B02")
+    assert window.is_windowshutter()
+    assert window.is_open is False
+    window_status = linked.device_status("0A1B02", STALE_AFTER)
+    assert window_status.last_heard is not None
+    assert (window_status.initialized, window_status.link_error, window_status.raw_flags) == (
+        None,
+        None,
+        None,
+    )
+
+
 def test_thermostat_reads_actual_temperature_in_auto_and_manual(cube: FakeCube) -> None:
     cube.set_actual("0A1B01", 19.5)
     linked = connect(cube)
