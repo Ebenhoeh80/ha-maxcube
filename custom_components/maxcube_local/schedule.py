@@ -16,6 +16,8 @@ import re
 from datetime import datetime
 from typing import Any
 
+from .const import MAX_DUTY_CYCLE_FOR_WRITING
+
 # Order of the days in the Cube's data: Saturday first.
 CUBE_DAY_ORDER = ("saturday", "sunday", "monday", "tuesday", "wednesday", "thursday", "friday")
 # Order for people (and for ``datetime.weekday()``): Monday first.
@@ -166,3 +168,74 @@ def validate_periods(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if previous != END_OF_DAY_MINUTES:
         raise ScheduleError("must_end_at_midnight")
     return result
+
+
+# --- Writing several days, and copying a programme -----------------------------------------------
+
+# One telegram (one day written to one thermostat) costs about this share of the Cube's radio time:
+# six writes raised the duty cycle from 4 % to 21 % on a real Cube (docs/ENGINEERING.md, section 4).
+RADIO_PERCENT_PER_TELEGRAM = 2.8
+
+
+def _one_programme_for(
+    days: list[str] | None, periods: list[dict[str, Any]] | None
+) -> dict[str, list[dict[str, Any]]]:
+    """Return the same checked setpoints for each of the days (each day once)."""
+    if not days:
+        raise ScheduleError("no_days")
+    slots = validate_periods(periods or [])
+    return dict.fromkeys(days, slots)
+
+
+def plan_request(
+    days: list[str] | None,
+    periods: list[dict[str, Any]] | None,
+    by_day: dict[str, list[dict[str, Any]]] | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Return ``{day: setpoints}`` for a write request, every day checked as ``validate_periods`` does.
+
+    Either ``days`` with one list of ``periods`` for all of them, or ``by_day`` with the periods of
+    each day; not both.
+    """
+    if by_day is None:
+        return _one_programme_for(days, periods)
+    if days or periods:
+        raise ScheduleError("mixed_request")
+    if not by_day:
+        raise ScheduleError("no_days")
+    return {day: validate_periods(day_periods) for day, day_periods in by_day.items()}
+
+
+def source_programme(source: Schedule, days: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Return the requested days of a programme read from a thermostat, as writable setpoints.
+
+    A day the programme does not have, or one that cannot be written as it is (for example more
+    setpoints than one message holds), is refused.
+    """
+    missing = [day for day in days if not source.get(day)]
+    if missing:
+        raise ScheduleError("no_source_programme", ", ".join(missing))
+    return {
+        day: validate_periods([{"until": s["until"], "temperature": s["temp"]} for s in source[day]])
+        for day in days
+    }
+
+
+def changed_days(
+    wanted: dict[str, list[dict[str, Any]]], stored: Schedule
+) -> dict[str, list[dict[str, Any]]]:
+    """Return the days whose programme differs from the stored one; only those are sent."""
+    return {day: slots for day, slots in wanted.items() if stored.get(day) != slots}
+
+
+def check_radio_budget(duty: int | None, telegrams: int) -> None:
+    """Refuse a request that would take the Cube to the write limit of the duty cycle or beyond.
+
+    ``duty`` is the Cube's duty cycle at the last poll (an unknown one counts as zero); every
+    telegram adds about ``RADIO_PERCENT_PER_TELEGRAM``. Nothing is refused without a telegram.
+    """
+    if not telegrams:
+        return
+    projected = (duty or 0) + telegrams * RADIO_PERCENT_PER_TELEGRAM
+    if projected >= MAX_DUTY_CYCLE_FOR_WRITING:
+        raise ScheduleError("radio_too_busy", f"{projected:.0f}")

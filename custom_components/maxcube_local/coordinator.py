@@ -18,7 +18,7 @@ from typing import Any, TypeVar
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -36,6 +36,7 @@ from .const import (
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .health import BatteryHold
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
+from .schedule import ScheduleError, changed_days, check_radio_budget, source_programme
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -283,6 +284,64 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         pending = {day: days[day] for day, result in results.items() if result == "sent_not_confirmed"}
         if pending:
             self._schedule_verification(device, pending)
+        return results
+
+    def _copy_plans(
+        self, source: MaxDevice, targets: list[MaxDevice], days: list[str]
+    ) -> dict[str, dict[str, list[dict]]]:
+        """Check a copy and return the days to send to each target (``{address: {day: slots}}``).
+
+        Nothing is sent when the check fails: the problems are raised as translated service errors.
+        """
+        for device in (source, *targets):
+            if not device.is_thermostat():
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key="schedule_radiator_only"
+                )
+        try:
+            wanted = source_programme(getattr(source, "schedule", None) or {}, days)
+            plans = {
+                target.rf_address: changed_days(wanted, getattr(target, "schedule", None) or {})
+                for target in targets
+            }
+            check_radio_budget(self.cube.duty_cycle, sum(len(plan) for plan in plans.values()))
+        except ScheduleError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key=f"schedule_{err.key}",
+                translation_placeholders={"detail": err.detail},
+            ) from err
+        return plans
+
+    async def async_copy_schedule(
+        self, source: MaxDevice, targets: list[MaxDevice], days: list[str]
+    ) -> dict[str, dict[str, str]]:
+        """Copy the weekly programme of a radiator thermostat to other radiator thermostats.
+
+        Only the days that differ from a target's programme are written, and the radio time is
+        checked before the first telegram. Returns ``{address: {day: state}}``: the states of
+        ``async_write_schedule``, and ``"unchanged"`` for the days that were not sent.
+        """
+        plans = self._copy_plans(source, targets, days)
+        results: dict[str, dict[str, str]] = {}
+        for target in targets:
+            plan = plans[target.rf_address]
+            states = dict.fromkeys(days, "unchanged")
+            if plan:
+                states.update(await self.async_write_schedule(target, plan))
+            results[target.rf_address] = states
+        failed = [
+            f"{day} ({address})"
+            for address, states in results.items()
+            for day, state in states.items()
+            if state == "failed"
+        ]
+        if failed:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="schedule_not_written",
+                translation_placeholders={"days": ", ".join(failed)},
+            )
         return results
 
     def _schedule_verification(self, device: MaxDevice, pending: dict[str, list[dict]]) -> None:

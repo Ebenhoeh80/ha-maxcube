@@ -16,6 +16,7 @@ CONFIG_ENTRY_MINOR_VERSION = 2
 TITLE_PREFIX = "MAX! Cube"
 
 SERVICE_RECONNECT = "reconnect"
+SERVICE_COPY_SCHEDULE = "copy_schedule"
 # A programme is not written when the Cube has already used this share of its radio time.
 MAX_DUTY_CYCLE_FOR_WRITING = 90  # percent
 # The Cube shows a new programme only after the thermostat has taken it (about two minutes in

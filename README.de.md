@@ -69,8 +69,8 @@ data:
 
 Jeder Abschnitt gibt die Temperatur an, die **bis** zur genannten Uhrzeit gilt; der letzte Abschnitt muss um
 `24:00` enden. Höchstens sieben Abschnitte pro Tag, Zeiten in 5-Minuten-Schritten, Temperaturen in halben
-Grad von 4,5 („aus“) bis 30,5 („an“). Dasselbe Programm wird auf jeden genannten Tag geschrieben; für andere
-Tage den Dienst erneut aufrufen. Mit `dry_run: true` wird die Eingabe nur geprüft: Es wird nichts an den Cube
+Grad von 4,5 („aus“) bis 30,5 („an“). Dasselbe Programm wird auf jeden genannten Tag geschrieben; für andere Abschnitte an anderen
+Tagen siehe `by_day` unten. Mit `dry_run: true` wird die Eingabe nur geprüft: Es wird nichts an den Cube
 gesendet.
 
 - Nach dem Schreiben liest die Integration das Programm vom Cube zurück und meldet je Tag, ob der Cube jetzt
@@ -84,6 +84,39 @@ gesendet.
 - Das Programm wirkt nur, solange ein Thermostat im **Automatik**-Modus ist.
 - Das Wochenprogramm wird je Thermostat gespeichert. Die MAX!-Software setzt es je Raum; damit ein Raum
   einheitlich bleibt, wähle alle Heizkörperthermostate des Raums als Ziel.
+
+### Verschiedene Abschnitte je Tag
+
+`by_day` gibt jedem Tag eigene Abschnitte, statt `days` und `periods` (nicht zusammen verwenden):
+
+```yaml
+action: maxcube_local.set_schedule
+target:
+  entity_id: climate.kinderzimmer_thermostat_kinderzimmer
+data:
+  by_day:
+    monday: [{until: "24:00", temperature: 17}]
+    saturday: [{until: "08:00", temperature: 19}, {until: "24:00", temperature: 21}]
+```
+
+### Programm auf andere Thermostate kopieren
+
+`maxcube_local.copy_schedule` kopiert das Programm eines Heizkörperthermostats (`source`) auf andere
+Heizkörperthermostate (`targets`), für alle sieben Tage oder nur für die Tage in `days`:
+
+```yaml
+action: maxcube_local.copy_schedule
+data:
+  source: climate.kinderzimmer_thermostat_kinderzimmer
+  targets: [climate.schlafzimmer_thermostat, climate.gaestezimmer_thermostat]
+  days: [saturday, sunday]   # optional, Standard: alle sieben Tage
+```
+
+Geschrieben wird nur an den Tagen, die sich vom Programm des Ziels unterscheiden. Vor dem ersten Funktelegramm
+schätzt die Integration die Funkzeit (etwa 2,8 % je Telegramm, zur aktuellen Funkauslastung addiert). Würde
+der Cube 90 % erreichen, wird die Anfrage abgelehnt und nichts gesendet. Die Antwort nennt das Ergebnis je
+Thermostat und Tag (`unchanged`, `confirmed`, `sent_not_confirmed` oder `failed`). Quelle und Ziele müssen
+Heizkörperthermostate desselben Cubes sein.
 
 ### Karte für das Wochenprogramm
 
