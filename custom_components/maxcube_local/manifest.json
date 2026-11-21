@@ -5,6 +5,7 @@
   "codeowners": ["@Ebenhoeh80"],
   "config_flow": true,
   "connectivity": ["network"],
+  "dependencies": ["frontend", "http"],
   "dhcp": [{ "macaddress": "001A22*" }],
   "documentation": "https://github.com/Ebenhoeh80/ha-maxcube",
   "integration_type": "hub",

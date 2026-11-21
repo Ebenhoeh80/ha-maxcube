@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -91,3 +92,13 @@ def test_wall_thermostats_are_hidden_because_the_service_refuses_them() -> None:
     assert '"Wall Thermostat"' in (BASE / "const.py").read_text(encoding="utf-8")
     assert "_isRadiator(" in SOURCE
     assert "/wall/i" in SOURCE
+
+
+def test_the_manifest_depends_on_what_the_card_registration_needs() -> None:
+    manifest = json.loads((BASE / "manifest.json").read_text(encoding="utf-8"))
+    assert {"frontend", "http"} <= set(manifest["dependencies"])
+
+
+def test_the_registered_file_exists() -> None:
+    registration = (BASE / "card.py").read_text(encoding="utf-8")
+    assert '"frontend" / "maxcube-schedule-card.js"' in registration
