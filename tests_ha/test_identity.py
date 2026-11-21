@@ -21,7 +21,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.maxcube_local import async_migrate_entry, config_flow
 from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 
-from .conftest import CUBE_SERIAL, HOST, FakeCube
+from .conftest import CUBE_SERIAL, HOST, FakeCube, device_config_entries
 
 NEW_HOST = "192.168.10.99"
 TITLE = f"MAX! Cube ({CUBE_SERIAL})"
@@ -130,7 +130,7 @@ async def test_a_second_entry_for_the_same_cube_does_not_run(hass: HomeAssistant
     assert er.async_entries_for_config_entry(er.async_get(hass), second.entry_id) == []
     assert second.unique_id == HOST  # not taken over; the first entry owns the serial number
     devices = dr.async_entries_for_config_entry(dr.async_get(hass), first.entry_id)
-    assert devices and all(device.config_entry_id == first.entry_id for device in devices)
+    assert devices and all(first.entry_id in device_config_entries(device) for device in devices)
 
     # removing the duplicate leaves the devices and entities of the first entry as they are
     before = _snapshot(hass, first)
