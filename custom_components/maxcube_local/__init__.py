@@ -72,7 +72,8 @@ def _maxcube_device(
     if entity is not None and entity.platform == DOMAIN and entity.config_entry_id:
         entry = hass.config_entries.async_get_entry(entity.config_entry_id)
         coordinator = getattr(entry, "runtime_data", None)
-        if coordinator is not None:
+        if coordinator is not None and entity.unique_id in coordinator.data.devices:
+            # The device is listed in the snapshot; the library object is only the write target.
             device = coordinator.cube.device_by_rf(entity.unique_id)
             if device is not None:
                 return entity.config_entry_id, coordinator, device
@@ -95,7 +96,9 @@ async def _async_copy_schedule(hass: HomeAssistant, call: ServiceCall) -> Servic
             translation_domain=DOMAIN, translation_key="schedule_other_cube"
         )
     results = await coordinator.async_copy_schedule(
-        source, [device for _, _, device in found.values()], call.data["days"]
+        source.rf_address,
+        [device.rf_address for _, _, device in found.values()],
+        call.data["days"],
     )
     response: dict[str, Any] = {}
     for entity_id, (_, _, device) in found.items():
@@ -268,13 +271,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
 
 def _current_identifiers(entry: MaxCubeConfigEntry) -> set[str] | None:
     """Return the addresses of the Cube and all its devices, or ``None`` if the list is not trustworthy."""
-    cube = entry.runtime_data.cube
-    if not cube.devices:
+    snapshot = entry.runtime_data.data
+    if not snapshot.devices:
         # An empty list is more likely a failed read than a Cube without any device.
         return None
-    current = {device.rf_address for device in cube.devices}
-    if cube.serial:
-        current.add(cube.serial)
+    current = set(snapshot.devices)
+    if snapshot.serial:
+        current.add(snapshot.serial)
     return current
 
 

@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time is checked before the first telegram (about 2.8 % per telegram plus the current duty cycle); the request is
   refused, and nothing is sent, if the Cube would reach 90 %. The response gives the result per thermostat and day.
 
+### Changed
+- Entities read an immutable snapshot taken after each poll instead of the library's mutable objects.
+
 ## [1.6.1] - 2026-11-21
 
 ### Changed

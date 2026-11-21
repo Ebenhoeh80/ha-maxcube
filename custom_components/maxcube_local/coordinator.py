@@ -35,8 +35,9 @@ from .const import (
 )
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .health import BatteryHold
-from .linkstatus import DeviceStatus, LinkStatusMaxCube
+from .linkstatus import LinkStatusMaxCube
 from .schedule import ScheduleError, changed_days, check_radio_budget, source_programme
+from .snapshot import CubeSnapshot, DeviceState, schedule_as_dict, take_snapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,8 +54,12 @@ class WrongCubeError(OSError):
     """A different Cube than the one of this entry answers at the saved address."""
 
 
-class MaxCubeCoordinator(DataUpdateCoordinator[None]):
-    """Owns the blocking MaxCube object and refreshes it in the executor."""
+class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
+    """Owns the blocking MaxCube object and refreshes it in the executor.
+
+    ``data`` is the snapshot of the last successful poll (see ``snapshot.py``): entities read
+    only that, never the library objects, which the next poll changes in the executor.
+    """
 
     config_entry: MaxCubeConfigEntry
 
@@ -99,9 +104,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         # Three missed polls before a device is considered stale.
         self.stale_after = max(3 * scan_interval, MIN_STALE_AFTER)
         self._cube: LinkStatusMaxCube | None = None
-        # Low-battery reports are held for a while (see ``BatteryHold``); read via ``battery_low``.
+        # Low-battery reports are held for a while (see ``BatteryHold``); the held value is in the snapshot.
         self._battery_hold = BatteryHold()
-        self._battery_low: dict[str, bool] = {}
 
     @property
     def cube(self) -> LinkStatusMaxCube:
@@ -147,16 +151,15 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             self._adopt_host(new_host)
             self._cube = await self.hass.async_add_executor_job(self._connect)
 
-    async def _async_update_data(self) -> None:
-        """Refresh all device states from the Cube."""
+    async def _async_update_data(self) -> CubeSnapshot:
+        """Refresh all device states from the Cube and return the snapshot of this poll."""
         if self._cube is None:
             self._cube = await self.hass.async_add_executor_job(self._connect)
-            self._update_battery(self._cube)
-            return
+            return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
         try:
             await self._async_poll(self._cube)
             self._check_identity(self._cube)
-            self._update_battery(self._cube)
+            return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
@@ -287,24 +290,25 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         return results
 
     def _copy_plans(
-        self, source: MaxDevice, targets: list[MaxDevice], days: list[str]
+        self, source: DeviceState, targets: list[DeviceState], days: list[str]
     ) -> dict[str, dict[str, list[dict]]]:
         """Check a copy and return the days to send to each target (``{address: {day: slots}}``).
 
-        Nothing is sent when the check fails: the problems are raised as translated service errors.
+        The programmes and the radio budget come from the snapshot of the last poll. Nothing is sent
+        when the check fails: the problems are raised as translated service errors.
         """
-        for device in (source, *targets):
-            if not device.is_thermostat():
+        for state in (source, *targets):
+            if not state.is_thermostat:
                 raise ServiceValidationError(
                     translation_domain=DOMAIN, translation_key="schedule_radiator_only"
                 )
         try:
-            wanted = source_programme(getattr(source, "schedule", None) or {}, days)
+            wanted = source_programme(schedule_as_dict(source.schedule), days)
             plans = {
-                target.rf_address: changed_days(wanted, getattr(target, "schedule", None) or {})
+                target.rf_address: changed_days(wanted, schedule_as_dict(target.schedule))
                 for target in targets
             }
-            check_radio_budget(self.cube.duty_cycle, sum(len(plan) for plan in plans.values()))
+            check_radio_budget(self.data.duty_cycle, sum(len(plan) for plan in plans.values()))
         except ScheduleError as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -314,22 +318,30 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         return plans
 
     async def async_copy_schedule(
-        self, source: MaxDevice, targets: list[MaxDevice], days: list[str]
+        self, source_rf: str, target_rfs: list[str], days: list[str]
     ) -> dict[str, dict[str, str]]:
         """Copy the weekly programme of a radiator thermostat to other radiator thermostats.
 
         Only the days that differ from a target's programme are written, and the radio time is
         checked before the first telegram. Returns ``{address: {day: state}}``: the states of
-        ``async_write_schedule``, and ``"unchanged"`` for the days that were not sent.
+        ``async_write_schedule``, and ``"unchanged"`` for the days that were not sent. The
+        programmes and the devices are read from the snapshot; the write goes to the library object.
         """
-        plans = self._copy_plans(source, targets, days)
+        snapshot = self.data
+        plans = self._copy_plans(
+            snapshot.device(source_rf), [snapshot.device(rf) for rf in target_rfs], days
+        )
         results: dict[str, dict[str, str]] = {}
-        for target in targets:
-            plan = plans[target.rf_address]
+        for rf_address in target_rfs:
+            plan = plans[rf_address]
             states = dict.fromkeys(days, "unchanged")
             if plan:
-                states.update(await self.async_write_schedule(target, plan))
-            results[target.rf_address] = states
+                device = self.cube.device_by_rf(rf_address)
+                if device is None:
+                    states.update(dict.fromkeys(plan, "failed"))
+                else:
+                    states.update(await self.async_write_schedule(device, plan))
+            results[rf_address] = states
         failed = [
             f"{day} ({address})"
             for address, states in results.items()
@@ -401,26 +413,15 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
             await self.async_cube_call(self._cube.disconnect)
         await self.async_request_refresh()
 
-    def battery_low(self, rf_address: str) -> bool:
-        """Return whether a device's battery counts as low (held after the Cube stops reporting it)."""
-        return self._battery_low.get(rf_address, False)
+    def _take_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
+        """Copy the Cube into a snapshot; runs in the executor, right after the poll.
 
-    def _update_battery(self, cube: LinkStatusMaxCube) -> None:
-        """Take the low-battery flags of the last poll into the held state."""
-        now = dt_util.utcnow().timestamp()
-        for device in cube.devices:
-            self._battery_low[device.rf_address] = self._battery_hold.update(
-                device.rf_address, bool(getattr(device, "battery", 0)), now
-            )
-
-    def device_status(self, rf_address: str) -> DeviceStatus:
-        """Return the RF link status for one device.
-
-        Falls back to an all-unknown, stale status while the Cube object has not
-        been built yet, so entities can always read a well-formed value.
+        The copy is made before the next poll can change the library objects. The low-battery
+        flags go through ``BatteryHold`` here, so the held value is part of the snapshot.
         """
-        if self._cube is None:
-            return DeviceStatus(
-                initialized=None, error=None, link_error=None, last_heard=None, stale=True
-            )
-        return self._cube.device_status(rf_address, self.stale_after)
+        now = dt_util.utcnow().timestamp()
+        return take_snapshot(
+            cube,
+            self.stale_after,
+            lambda rf_address, low: self._battery_hold.update(rf_address, low, now),
+        )

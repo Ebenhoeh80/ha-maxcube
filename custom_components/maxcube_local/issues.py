@@ -43,7 +43,7 @@ class _IssueKeeper:
         if self._coordinator.last_update_success:
             self._clear_timer()
             self._set_unreachable(False)
-            duty = getattr(self._coordinator.cube, "duty_cycle", None)
+            duty = self._coordinator.data.duty_cycle
             self._set_busy(self._watch.update(duty, monotonic()))
         elif self._cancel_timer is None and not self._unreachable:
             # Listeners hear about the first failure only, so the clock runs from here.
@@ -97,10 +97,12 @@ class _IssueKeeper:
             ir.async_delete_issue(self._hass, DOMAIN, issue_id)
 
     def _update_device_hints(self) -> None:
-        coordinator = self._coordinator
+        snapshot = self._coordinator.data
         current: dict[str, tuple[str, str]] = {}
         for finding in find_problems(
-            coordinator.cube.devices, coordinator.device_status, coordinator.battery_low
+            snapshot.devices.values(),
+            lambda rf_address: snapshot.device(rf_address).status,
+            lambda rf_address: bool(snapshot.device(rf_address).battery_low),
         ):
             issue_id = _issue_id(self._entry, finding.kind, finding.rf_address)
             current[issue_id] = (finding.kind, finding.name)

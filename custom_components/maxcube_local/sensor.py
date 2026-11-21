@@ -17,6 +17,7 @@ from maxcube.device import MaxDevice
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity, async_add_devices_as_they_appear
+from .snapshot import DeviceState
 
 # read-only: the coordinator does the polling
 PARALLEL_UPDATES = 0
@@ -29,22 +30,24 @@ async def async_setup_entry(
 ) -> None:
     """Set up valve-position and temperature sensors."""
     coordinator = entry.runtime_data
-    cube = coordinator.cube
+    snapshot = coordinator.data
 
-    def _sensors(coordinator: MaxCubeCoordinator, device: MaxDevice) -> list[SensorEntity]:
+    def _sensors(
+        coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> list[SensorEntity]:
         entities: list[SensorEntity] = []
-        if device.is_thermostat():
-            entities.append(MaxCubeValve(coordinator, device))
-        if device.is_thermostat() or device.is_wallthermostat():
-            entities.append(MaxCubeTemperature(coordinator, device))
+        if state.is_thermostat:
+            entities.append(MaxCubeValve(coordinator, state, device))
+        if state.is_thermostat or state.is_wallthermostat:
+            entities.append(MaxCubeTemperature(coordinator, state, device))
         return entities
 
     async_add_devices_as_they_appear(entry, async_add_entities, _sensors)
     entities: list[SensorEntity] = []
-    if cube.serial:
-        if cube.duty_cycle is not None:
+    if snapshot.serial:
+        if snapshot.duty_cycle is not None:
             entities.append(MaxCubeStatusSensor(coordinator, "duty_cycle", PERCENTAGE))
-        if cube.free_memory_slots is not None:
+        if snapshot.free_memory_slots is not None:
             entities.append(MaxCubeStatusSensor(coordinator, "free_memory_slots", None))
     async_add_entities(entities)
 
@@ -56,15 +59,17 @@ class MaxCubeValve(MaxCubeEntity, SensorEntity):
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the valve-position sensor."""
-        super().__init__(coordinator, device)
-        self._attr_unique_id = f"{device.rf_address}_valve"
+        super().__init__(coordinator, state, device)
+        self._attr_unique_id = f"{state.rf_address}_valve"
 
     @property
     def native_value(self) -> int | None:
         """Return the valve opening in percent."""
-        return getattr(self._device, "valve_position", None)
+        return self._device_state.valve_position
 
 
 class MaxCubeTemperature(MaxCubeEntity, SensorEntity):
@@ -75,15 +80,17 @@ class MaxCubeTemperature(MaxCubeEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 1
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the temperature sensor."""
-        super().__init__(coordinator, device)
-        self._attr_unique_id = f"{device.rf_address}_temperature"
+        super().__init__(coordinator, state, device)
+        self._attr_unique_id = f"{state.rf_address}_temperature"
 
     @property
     def native_value(self) -> float | None:
         """Return the measured temperature, if the device reports one."""
-        temp = getattr(self._device, "actual_temperature", None)
+        temp = self._device_state.actual_temperature
         # Radiator thermostats only report a temperature in auto/manual mode.
         return temp if temp else None
 
@@ -110,12 +117,13 @@ class MaxCubeStatusSensor(CoordinatorEntity[MaxCubeCoordinator], SensorEntity):
         self._key = key
         self._attr_translation_key = key
         self._attr_native_unit_of_measurement = unit
-        serial = coordinator.cube.serial
+        # Only created when the Cube has a serial number (see async_setup_entry).
+        serial = coordinator.data.serial or ""
         self._attr_unique_id = f"{serial}_{key}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, serial)})
 
     @property
     def native_value(self) -> int | None:
-        """Return the value from the Cube's latest H message."""
-        return getattr(self.coordinator.cube, self._key, None)
+        """Return the value from the Cube's latest H message (as of the last poll)."""
+        return getattr(self.coordinator.data, self._key, None)
 

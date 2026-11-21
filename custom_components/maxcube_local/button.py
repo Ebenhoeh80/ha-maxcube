@@ -67,8 +67,7 @@ class MaxCubeRebootButton(ButtonEntity):
         """Initialize the button on the Cube's hub device."""
         super().__init__()
         self.coordinator = coordinator
-        cube = coordinator.cube
-        self._serial = cube.serial or ""
+        self._serial = coordinator.data.serial or ""
         self._attr_unique_id = f"{self._serial}_reboot"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, self._serial)})
 
