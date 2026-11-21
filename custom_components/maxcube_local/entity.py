@@ -14,6 +14,7 @@ from maxcube.device import MaxDevice
 
 from .const import DEVICE_TYPE_NAMES, DOMAIN, MANUFACTURER
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
+from .snapshot import DeviceState
 
 # Home Assistant 2026.11 links a device to its hub by registry id (``via_device_id``)
 # and deprecates ``via_device`` (removed in 2027.8). Older versions only know
@@ -44,60 +45,70 @@ def _apply_hub_link(
 def async_add_devices_as_they_appear(
     entry: MaxCubeConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
-    factory: Callable[[MaxCubeCoordinator, MaxDevice], Iterable[Entity]],
+    factory: Callable[[MaxCubeCoordinator, DeviceState, MaxDevice], Iterable[Entity]],
 ) -> None:
     """Create entities for every device now and for each device that appears later.
 
-    A device can be paired with the Cube while Home Assistant runs. It shows up in the next poll
-    and gets its entities then, without reloading the entry.
+    The devices are taken from the snapshot of the last poll. The library object of a device is
+    passed along as well: commands go to it. A device that is no longer in the Cube's list gets
+    no entities; the next poll decides.
     """
     coordinator = entry.runtime_data
     known: set[str] = set()
 
     @callback
     def _add_new() -> None:
-        cube = coordinator.cube
-        new = [device for device in cube.devices if device.rf_address not in known]
-        if not new:
-            return
-        known.update(device.rf_address for device in new)
-        async_add_entities([entity for device in new for entity in factory(coordinator, device)])
+        new = [
+            state for rf_address, state in coordinator.data.devices.items() if rf_address not in known
+        ]
+        entities: list[Entity] = []
+        for state in new:
+            device = coordinator.cube.device_by_rf(state.rf_address)
+            if device is None:
+                continue
+            known.add(state.rf_address)
+            entities.extend(factory(coordinator, state, device))
+        if entities:
+            async_add_entities(entities)
 
     _add_new()
     entry.async_on_unload(coordinator.async_add_listener(_add_new))
 
 
 class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):
-    """Base class tying a MAX! device to its coordinator and device entry."""
+    """Base class tying a MAX! device to its coordinator and device entry.
+
+    Reads go to ``_device_state`` (the snapshot). ``_device`` is the library object, used only to
+    send commands to the Cube.
+    """
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the entity and its device registry entry."""
         super().__init__(coordinator)
         self._device = device
-        self._rf_address = device.rf_address
+        self._rf_address = state.rf_address
 
-        suggested_area: str | None = None
-        room_id = getattr(device, "room_id", None)
-        if room_id:
-            try:
-                room = coordinator.cube.room_by_id(room_id)
-                suggested_area = room.name if room else None
-            except Exception:  # noqa: BLE001 - defensive, library shape varies
-                suggested_area = None
-
-        cube_serial = getattr(coordinator.cube, "serial", None)
+        snapshot = coordinator.data
+        suggested_area = snapshot.room_names.get(state.room_id) if state.room_id else None
         info = DeviceInfo(
-            identifiers={(DOMAIN, device.rf_address)},
-            name=device.name or f"MAX! {device.rf_address}",
+            identifiers={(DOMAIN, state.rf_address)},
+            name=state.name or f"MAX! {state.rf_address}",
             manufacturer=MANUFACTURER,
-            model=DEVICE_TYPE_NAMES.get(device.type, "MAX! Device"),
-            serial_number=getattr(device, "serial", None),
+            model=DEVICE_TYPE_NAMES.get(state.kind, "MAX! Device"),
+            serial_number=state.serial,
             suggested_area=suggested_area,
         )
-        _apply_hub_link(info, coordinator, cube_serial)
+        _apply_hub_link(info, coordinator, snapshot.serial)
         self._attr_device_info = info
+
+    @property
+    def _device_state(self) -> DeviceState:
+        """The values of this device at the last poll; the entity reads nothing else."""
+        return self.coordinator.data.device(self._rf_address)
 
     @property
     def available(self) -> bool:

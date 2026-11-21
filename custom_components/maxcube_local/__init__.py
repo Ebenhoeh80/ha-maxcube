@@ -197,13 +197,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> b
 
 def _current_identifiers(entry: MaxCubeConfigEntry) -> set[str] | None:
     """Return the addresses of the Cube and all its devices, or ``None`` if the list is not trustworthy."""
-    cube = entry.runtime_data.cube
-    if not cube.devices:
+    snapshot = entry.runtime_data.data
+    if not snapshot.devices:
         # An empty list is more likely a failed read than a Cube without any device.
         return None
-    current = {device.rf_address for device in cube.devices}
-    if cube.serial:
-        current.add(cube.serial)
+    current = set(snapshot.devices)
+    if snapshot.serial:
+        current.add(snapshot.serial)
     return current
 
 

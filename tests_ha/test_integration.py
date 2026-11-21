@@ -632,6 +632,7 @@ async def test_the_user_may_delete_only_a_device_the_cube_no_longer_lists(
     assert await async_remove_config_entry_device(hass, config_entry, orphan)
 
     cube.devices.clear()
+    await config_entry.runtime_data.async_refresh()  # the list is read again at the next poll
     assert not await async_remove_config_entry_device(hass, config_entry, orphan)
 FACTORY_ADDRESS = "192.168.0.222"
 

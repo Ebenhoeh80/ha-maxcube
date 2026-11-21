@@ -16,6 +16,7 @@ from maxcube.device import MaxDevice
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity, async_add_devices_as_they_appear
+from .snapshot import DeviceState
 
 # read-only: the coordinator does the polling
 PARALLEL_UPDATES = 0
@@ -30,22 +31,22 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
 
     def _binary_sensors(
-        coordinator: MaxCubeCoordinator, device: MaxDevice
+        coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
     ) -> list[BinarySensorEntity]:
         entities: list[BinarySensorEntity] = []
-        if device.is_windowshutter():
-            entities.append(MaxCubeWindow(coordinator, device))
-        if device.is_thermostat() or device.is_wallthermostat() or device.is_windowshutter():
-            entities.append(MaxCubeBattery(coordinator, device))
+        if state.is_windowshutter:
+            entities.append(MaxCubeWindow(coordinator, state, device))
+        if state.is_thermostat or state.is_wallthermostat or state.is_windowshutter:
+            entities.append(MaxCubeBattery(coordinator, state, device))
             # RF link diagnostics: same bit set for every device type.
-            entities.append(MaxCubeUninitialized(coordinator, device))
-            entities.append(MaxCubeError(coordinator, device))
-            entities.append(MaxCubeRadioFault(coordinator, device))
-            entities.append(MaxCubeStale(coordinator, device))
+            entities.append(MaxCubeUninitialized(coordinator, state, device))
+            entities.append(MaxCubeError(coordinator, state, device))
+            entities.append(MaxCubeRadioFault(coordinator, state, device))
+            entities.append(MaxCubeStale(coordinator, state, device))
         return entities
 
     async_add_devices_as_they_appear(entry, async_add_entities, _binary_sensors)
-    if coordinator.cube.serial:
+    if coordinator.data.serial:
         async_add_entities([MaxCubeConnectivity(coordinator)])
 
 
@@ -55,15 +56,17 @@ class MaxCubeWindow(MaxCubeEntity, BinarySensorEntity):
     _attr_name = None
     _attr_device_class = BinarySensorDeviceClass.WINDOW
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the window contact."""
-        super().__init__(coordinator, device)
-        self._attr_unique_id = device.rf_address
+        super().__init__(coordinator, state, device)
+        self._attr_unique_id = state.rf_address
 
     @property
     def is_on(self) -> bool:
         """Return True when the window is open."""
-        return bool(self._device.is_open)
+        return bool(self._device_state.is_open)
 
 
 class MaxCubeBattery(MaxCubeEntity, BinarySensorEntity):
@@ -72,15 +75,17 @@ class MaxCubeBattery(MaxCubeEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.BATTERY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the battery sensor."""
-        super().__init__(coordinator, device)
-        self._attr_unique_id = f"{device.rf_address}_battery"
+        super().__init__(coordinator, state, device)
+        self._attr_unique_id = f"{state.rf_address}_battery"
 
     @property
     def is_on(self) -> bool:
         """Return True when the battery is low (held for a while after the Cube stops reporting it)."""
-        return self.coordinator.battery_low(self._rf_address)
+        return bool(self._device_state.battery_low)
 
 
 class MaxCubeDeviceStatus(MaxCubeEntity, BinarySensorEntity):
@@ -97,15 +102,17 @@ class MaxCubeDeviceStatus(MaxCubeEntity, BinarySensorEntity):
     _bit_name: str = ""
     _problem_value: bool = True
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the diagnostic sensor."""
-        super().__init__(coordinator, device)
-        self._attr_unique_id = f"{device.rf_address}_{self._bit_name}"
+        super().__init__(coordinator, state, device)
+        self._attr_unique_id = f"{state.rf_address}_{self._bit_name}"
 
     @property
     def is_on(self) -> bool | None:
         """Return True when this device has the problem this sensor reports."""
-        value = getattr(self.coordinator.device_status(self._rf_address), self._bit_name)
+        value = getattr(self._device_state.status, self._bit_name)
         if value is None:
             return None
         return value == self._problem_value
@@ -113,7 +120,7 @@ class MaxCubeDeviceStatus(MaxCubeEntity, BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         """Expose the raw flag bytes (hex) the bit was read from, for diagnosis."""
-        return {"raw_flags": self.coordinator.device_status(self._rf_address).raw_flags}
+        return {"raw_flags": self._device_state.status.raw_flags}
 
 
 class MaxCubeUninitialized(MaxCubeDeviceStatus, BinarySensorEntity):
@@ -165,7 +172,7 @@ class MaxCubeStale(MaxCubeDeviceStatus, BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         """Expose when the device was last heard, for graphing and templates."""
-        status = self.coordinator.device_status(self._rf_address)
+        status = self._device_state.status
         return {
             "last_heard": status.last_heard.isoformat() if status.last_heard else None,
             "raw_flags": status.raw_flags,
@@ -182,7 +189,7 @@ class MaxCubeConnectivity(CoordinatorEntity[MaxCubeCoordinator], BinarySensorEnt
     def __init__(self, coordinator: MaxCubeCoordinator) -> None:
         """Initialize the Cube connectivity sensor on the hub device."""
         super().__init__(coordinator)
-        serial = coordinator.cube.serial
+        serial = coordinator.data.serial
         self._attr_unique_id = f"{serial}_connectivity"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, serial)})
 

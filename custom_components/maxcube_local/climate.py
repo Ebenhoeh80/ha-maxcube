@@ -33,8 +33,6 @@ from maxcube.device import (
     MAX_DEVICE_MODE_BOOST,
     MAX_DEVICE_MODE_MANUAL,
     MAX_DEVICE_MODE_VACATION,
-    MAX_THERMOSTAT,
-    MAX_THERMOSTAT_PLUS,
     MaxDevice,
 )
 
@@ -84,9 +82,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the climate entities (radiator and wall thermostats)."""
 
-    def _climates(coordinator: MaxCubeCoordinator, device: MaxDevice) -> list[MaxCubeClimate]:
-        if device.is_thermostat() or device.is_wallthermostat():
-            return [MaxCubeClimate(coordinator, device)]
+    def _climates(
+        coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> list[MaxCubeClimate]:
+        if state.is_thermostat or state.is_wallthermostat:
+            return [MaxCubeClimate(coordinator, state, device)]
         return []
 
     async_add_devices_as_they_appear(entry, async_add_entities, _climates)
@@ -145,15 +145,12 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         PRESET_ON,
     ]
 
-    def __init__(self, coordinator: MaxCubeCoordinator, device: MaxDevice) -> None:
+    def __init__(
+        self, coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+    ) -> None:
         """Initialize the thermostat."""
-        super().__init__(coordinator, device)
-        self._attr_unique_id = device.rf_address
-
-    @property
-    def _device_state(self) -> DeviceState:
-        """The values of this thermostat at the last poll; the entity reads nothing else."""
-        return self.coordinator.data.device(self._rf_address)
+        super().__init__(coordinator, state, device)
+        self._attr_unique_id = state.rf_address
 
     @property
     def min_temp(self) -> float:
@@ -205,7 +202,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         state = self._device_state
         if state.schedule:
             return state.schedule
-        if state.room_id is not None:
+        if state.room_id in self.coordinator.data.room_names:
             for other in self.coordinator.data.devices.values():
                 if other.room_id == state.room_id and other.schedule:
                     return other.schedule
@@ -229,7 +226,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         self, days: list[str], periods: list[dict[str, Any]], dry_run: bool = False
     ) -> dict[str, Any]:
         """Write the same daily programme to the given days of a radiator thermostat."""
-        if self._device_state.kind not in (MAX_THERMOSTAT, MAX_THERMOSTAT_PLUS):
+        if not self._device_state.is_thermostat:
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="schedule_radiator_only"
             )
