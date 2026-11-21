@@ -121,19 +121,41 @@
     },
     "set_schedule": {
       "name": "Set schedule",
-      "description": "Write the same daily heating programme to the chosen days of a radiator thermostat. Each period gives the temperature that applies until the time shown; the last period must end at 24:00 (at most seven periods, times in steps of 5 minutes, temperatures in half degrees from 4.5 to 30.5). Wall thermostats cannot be programmed here.",
+      "description": "Write a daily heating programme to the chosen days of a radiator thermostat, or its own programme for each day (by_day). Each period gives the temperature that applies until the time shown; the last period must end at 24:00 (at most seven periods, times in steps of 5 minutes, temperatures in half degrees from 4.5 to 30.5). Wall thermostats cannot be programmed here.",
       "fields": {
         "days": {
           "name": "Days",
-          "description": "The days that get this programme (monday to sunday)."
+          "description": "The days that get this programme (monday to sunday). Leave out when using by_day."
         },
         "periods": {
           "name": "Periods",
-          "description": "A list of periods, each with 'until' (HH:MM) and 'temperature'."
+          "description": "A list of periods, each with 'until' (HH:MM) and 'temperature'. Used for all the days in days."
+        },
+        "by_day": {
+          "name": "Periods by day",
+          "description": "The periods of each day, as a mapping from the day to its list of periods, for example {monday: [...], saturday: [...]}. Use it instead of days and periods."
         },
         "dry_run": {
           "name": "Check only",
           "description": "Only check the request and show what would be written; nothing is sent to the Cube."
+        }
+      }
+    },
+    "copy_schedule": {
+      "name": "Copy schedule",
+      "description": "Copy the weekly programme of a radiator thermostat to other radiator thermostats of the same Cube. Only the days that differ are written. The radio time is checked first; if it would run out, nothing is sent. Returns the result per thermostat and day (unchanged, confirmed, sent_not_confirmed, failed).",
+      "fields": {
+        "source": {
+          "name": "Source",
+          "description": "The radiator thermostat whose programme is copied."
+        },
+        "targets": {
+          "name": "Targets",
+          "description": "The radiator thermostats that get the programme."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Only these days (monday to sunday). Without it, all seven days are considered."
         }
       }
     }
@@ -171,6 +193,24 @@
     },
     "schedule_not_written": {
       "message": "The Cube did not take the programme for: {days}."
+    },
+    "schedule_no_days": {
+      "message": "Name at least one day, or give the periods of each day in by_day."
+    },
+    "schedule_mixed_request": {
+      "message": "Use either days with periods, or by_day, not both."
+    },
+    "schedule_no_source_programme": {
+      "message": "The source thermostat has no programme for: {detail}."
+    },
+    "schedule_radio_too_busy": {
+      "message": "The copy would take the Cube to about {detail} % of its radio time, which is too much. Copy fewer days or to fewer thermostats, or try again later."
+    },
+    "schedule_other_cube": {
+      "message": "The source and the targets must belong to the same MAX! Cube."
+    },
+    "schedule_not_a_device": {
+      "message": "{entity} is not a MAX! thermostat of this integration."
     },
     "duplicate_cube": {
       "message": "This MAX! Cube is already managed by the entry \"{title}\". Remove this duplicate entry."

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `maxcube_local.set_schedule` takes `by_day`: its own periods for each day, instead of one list of periods for all the
+  days in `days`. The old form (`days` and `periods`) works as before.
+- Service `maxcube_local.copy_schedule` copies the weekly programme of a radiator thermostat to other radiator
+  thermostats of the same Cube, for all days or for the days given. Only the days that differ are written. The radio
+  time is checked before the first telegram (about 2.8 % per telegram plus the current duty cycle); the request is
+  refused, and nothing is sent, if the Cube would reach 90 %. The response gives the result per thermostat and day.
+
 ### Changed
 - Entities read an immutable snapshot taken after each poll instead of the library's mutable objects.
 

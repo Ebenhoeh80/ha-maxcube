@@ -19,7 +19,7 @@ set_schedule:
       domain: climate
   fields:
     days:
-      required: true
+      required: false
       example: '["monday", "tuesday", "wednesday", "thursday", "friday"]'
       selector:
         select:
@@ -33,8 +33,13 @@ set_schedule:
             - saturday
             - sunday
     periods:
-      required: true
+      required: false
       example: '[{"until": "06:00", "temperature": 17}, {"until": "08:00", "temperature": 21}, {"until": "24:00", "temperature": 17}]'
+      selector:
+        object:
+    by_day:
+      required: false
+      example: '{"monday": [{"until": "24:00", "temperature": 17}], "saturday": [{"until": "08:00", "temperature": 19}, {"until": "24:00", "temperature": 21}]}'
       selector:
         object:
     dry_run:
@@ -42,3 +47,33 @@ set_schedule:
       default: false
       selector:
         boolean:
+
+copy_schedule:
+  fields:
+    source:
+      required: true
+      selector:
+        entity:
+          integration: maxcube_local
+          domain: climate
+    targets:
+      required: true
+      selector:
+        entity:
+          integration: maxcube_local
+          domain: climate
+          multiple: true
+    days:
+      required: false
+      example: '["saturday", "sunday"]'
+      selector:
+        select:
+          multiple: true
+          options:
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday

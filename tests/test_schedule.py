@@ -274,3 +274,101 @@ def test_only_plain_hh_mm_times_are_taken() -> None:
 def test_temperatures_that_are_not_numbers_are_refused() -> None:
     for odd in (float("nan"), float("inf"), float("-inf")):
         assert _error([_period("24:00", odd)]) == "bad_temperature", odd
+
+
+# --- Writing several days, and copying a programme ------------------------------------------
+
+
+def _key(call, *args) -> str:  # noqa: ANN001
+    """Return the error key the call raises, or "" if it does not raise."""
+    try:
+        call(*args)
+    except schedule.ScheduleError as err:
+        return err.key
+    return ""
+
+
+def test_one_list_of_periods_is_written_to_every_day_given_once() -> None:
+    periods = [_period("06:00", 17), _period("24:00", 21)]
+    planned = schedule.plan_request(["friday", "monday", "friday"], periods, None)
+    assert list(planned) == ["friday", "monday"]
+    expected = [{"until": "06:00", "temp": 17.0}, {"until": "24:00", "temp": 21.0}]
+    assert planned == {"friday": expected, "monday": expected}
+
+
+def test_by_day_gives_each_day_its_own_periods() -> None:
+    by_day = {
+        "monday": [_period("24:00", 17)],
+        "saturday": [_period("08:00", 19), _period("24:00", 21)],
+    }
+    assert schedule.plan_request(None, None, by_day) == {
+        "monday": [{"until": "24:00", "temp": 17.0}],
+        "saturday": [{"until": "08:00", "temp": 19.0}, {"until": "24:00", "temp": 21.0}],
+    }
+
+
+def test_days_and_by_day_are_not_mixed() -> None:
+    by_day = {"monday": [_period("24:00", 17)]}
+    assert _key(schedule.plan_request, ["monday"], None, by_day) == "mixed_request"
+    assert _key(schedule.plan_request, None, [_period("24:00", 17)], by_day) == "mixed_request"
+
+
+def test_a_request_needs_days_or_by_day() -> None:
+    periods = [_period("24:00", 17)]
+    assert _key(schedule.plan_request, None, periods, None) == "no_days"
+    assert _key(schedule.plan_request, [], periods, None) == "no_days"
+    assert _key(schedule.plan_request, None, None, {}) == "no_days"
+
+
+def test_days_need_periods() -> None:
+    assert _key(schedule.plan_request, ["monday"], None, None) == "no_periods"
+    assert _key(schedule.plan_request, ["monday"], [], None) == "no_periods"
+
+
+def test_every_day_of_by_day_is_checked() -> None:
+    by_day = {"monday": [_period("24:00", 17)], "sunday": [_period("23:00", 17)]}
+    assert _key(schedule.plan_request, None, None, by_day) == "must_end_at_midnight"
+
+
+def test_a_source_day_is_returned_as_writable_periods() -> None:
+    source = {
+        "monday": [{"until": "06:00", "temp": 17.0}, {"until": "24:00", "temp": 21.0}],
+        "tuesday": [{"until": "24:00", "temp": 19.0}],
+    }
+    assert schedule.source_programme(source, ["tuesday", "monday"]) == {
+        "tuesday": [{"until": "24:00", "temp": 19.0}],
+        "monday": [{"until": "06:00", "temp": 17.0}, {"until": "24:00", "temp": 21.0}],
+    }
+
+
+def test_a_source_without_the_requested_day_is_refused() -> None:
+    source = {"monday": [{"until": "24:00", "temp": 17.0}]}
+    assert _key(schedule.source_programme, {}, ["monday"]) == "no_source_programme"
+    assert _key(schedule.source_programme, source, ["monday", "friday"]) == "no_source_programme"
+
+
+def test_a_source_day_with_more_periods_than_one_write_holds_is_refused() -> None:
+    source = {"monday": [{"until": f"{hour:02d}:00", "temp": 17.0} for hour in range(1, 14)]}
+    assert _key(schedule.source_programme, source, ["monday"]) == "too_many_periods"
+
+
+def test_only_the_days_that_differ_from_the_target_are_sent() -> None:
+    wanted = {"monday": [{"until": "24:00", "temp": 17.0}], "tuesday": [{"until": "24:00", "temp": 19.0}]}
+    stored = {"monday": [{"until": "24:00", "temp": 21.0}], "tuesday": [{"until": "24:00", "temp": 19.0}]}
+    assert schedule.changed_days(wanted, stored) == {"monday": wanted["monday"]}
+    assert schedule.changed_days(wanted, {}) == wanted
+    assert schedule.changed_days(wanted, dict(wanted)) == {}
+
+
+def test_each_radio_telegram_counts_2_8_percent_of_the_radio_time() -> None:
+    assert schedule.RADIO_PERCENT_PER_TELEGRAM == 2.8
+    schedule.check_radio_budget(0, 6)  # 16.8 %
+    schedule.check_radio_budget(70, 7)  # 89.6 %, below the limit of 90 %
+    assert _key(schedule.check_radio_budget, 70, 8) == "radio_too_busy"  # 92.4 %
+    assert _key(schedule.check_radio_budget, 89, 1) == "radio_too_busy"  # 91.8 %
+
+
+def test_an_unknown_duty_cycle_counts_as_zero_and_no_telegram_is_never_refused() -> None:
+    schedule.check_radio_budget(None, 10)  # 28 %
+    assert _key(schedule.check_radio_budget, None, 40) == "radio_too_busy"  # 112 %
+    schedule.check_radio_budget(99, 0)

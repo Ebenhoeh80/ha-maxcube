@@ -189,7 +189,8 @@ class MaxCubeConnectivity(CoordinatorEntity[MaxCubeCoordinator], BinarySensorEnt
     def __init__(self, coordinator: MaxCubeCoordinator) -> None:
         """Initialize the Cube connectivity sensor on the hub device."""
         super().__init__(coordinator)
-        serial = coordinator.data.serial
+        # Only created when the Cube has a serial number (see async_setup_entry).
+        serial = coordinator.data.serial or ""
         self._attr_unique_id = f"{serial}_connectivity"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, serial)})
 

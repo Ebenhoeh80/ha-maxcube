@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
+from custom_components.maxcube_local.schedule import WEEK_DAYS
 
 from .conftest import (
     CUBE_SERIAL,
@@ -1116,3 +1118,160 @@ async def test_a_low_battery_report_that_comes_and_goes_does_not_flap(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == "off"
+
+
+OTHER = "0A1B2F"
+
+
+def _second_radiator(cube: FakeCube) -> None:
+    """Add a second radiator thermostat to the fake Cube (before the setup); it differs on Monday."""
+    other = copy.deepcopy(cube.devices[0])
+    other.rf_address = OTHER
+    other.name = "Bad Thermostat 2"
+    other.serial = "KEQ4444444"
+    other.schedule["monday"] = [{"until": "24:00", "temp": 17.0}]
+    cube.devices.append(other)
+
+
+async def test_set_schedule_gives_each_day_its_own_periods(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    response = await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {
+            "entity_id": entity_id,
+            "by_day": {
+                "monday": [{"until": "24:00", "temperature": 17}],
+                "saturday": [{"until": "08:00", "temperature": 19}, {"until": "24:00", "temperature": 21}],
+            },
+        },
+        blocking=True,
+        return_response=True,
+    )
+    assert response[entity_id]["result"] == {"monday": "confirmed", "saturday": "confirmed"}
+    assert cube.written == [
+        (RADIATOR, "monday", [{"until": "24:00", "temp": 17.0}]),
+        (
+            RADIATOR,
+            "saturday",
+            [{"until": "08:00", "temp": 19.0}, {"until": "24:00", "temp": 21.0}],
+        ),
+    ]
+
+
+async def test_set_schedule_does_not_mix_days_with_by_day(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_schedule",
+            {
+                "entity_id": _entity_id(hass, "climate", RADIATOR),
+                "days": ["monday"],
+                "by_day": {"tuesday": [{"until": "24:00", "temperature": 21}]},
+            },
+            blocking=True,
+        )
+    assert cube.written == []
+
+
+async def test_copy_schedule_writes_only_the_days_that_differ(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    _second_radiator(cube)
+    await _setup(hass, config_entry)
+    source = _entity_id(hass, "climate", RADIATOR)
+    target = _entity_id(hass, "climate", OTHER)
+    response = await hass.services.async_call(
+        DOMAIN,
+        "copy_schedule",
+        {"source": source, "targets": [target]},
+        blocking=True,
+        return_response=True,
+    )
+    result = response[target]["result"]
+    assert result["monday"] == "confirmed"
+    assert result["tuesday"] == "unchanged"
+    assert set(result) == set(WEEK_DAYS)
+    assert cube.written == [(OTHER, "monday", DAY)]
+    await hass.async_block_till_done()
+
+
+async def test_copy_schedule_needs_a_programme_on_the_source(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    _second_radiator(cube)
+    cube.devices[0].schedule = {}
+    await _setup(hass, config_entry)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "copy_schedule",
+            {
+                "source": _entity_id(hass, "climate", RADIATOR),
+                "targets": [_entity_id(hass, "climate", OTHER)],
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert cube.written == []
+
+
+async def test_copy_schedule_is_for_radiator_thermostats_only(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    _second_radiator(cube)
+    await _setup(hass, config_entry)
+    radiator = _entity_id(hass, "climate", RADIATOR)
+    wall = _entity_id(hass, "climate", WALL)
+    for source, targets in ((radiator, [wall]), (wall, [radiator])):
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                DOMAIN,
+                "copy_schedule",
+                {"source": source, "targets": targets},
+                blocking=True,
+                return_response=True,
+            )
+    assert cube.written == []
+
+
+async def test_copy_schedule_refuses_when_the_radio_time_would_run_out(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    _second_radiator(cube)
+    cube.devices[-1].schedule["tuesday"] = [{"until": "24:00", "temp": 17.0}]
+    cube.duty_cycle = 85  # two telegrams would take the Cube to about 90.6 %
+    await _setup(hass, config_entry)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "copy_schedule",
+            {
+                "source": _entity_id(hass, "climate", RADIATOR),
+                "targets": [_entity_id(hass, "climate", OTHER)],
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert cube.written == []
+
+
+async def test_copy_schedule_only_takes_maxcube_entities(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "copy_schedule",
+            {"source": "climate.gibt_es_nicht", "targets": [_entity_id(hass, "climate", WALL)]},
+            blocking=True,
+            return_response=True,
+        )
+    assert cube.written == []

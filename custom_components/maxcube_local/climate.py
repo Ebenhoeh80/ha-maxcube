@@ -42,18 +42,21 @@ from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .schedule import (
     WEEK_DAYS,
     ScheduleError,
+    plan_request,
     scheduled_temperature,
-    validate_periods,
 )
 from .snapshot import DeviceState, schedule_as_dict
 from .snapshot import Schedule as DeviceSchedule
 
+_PERIODS = vol.All(
+    cv.ensure_list,
+    [{vol.Required("until"): cv.string, vol.Required("temperature"): vol.Coerce(float)}],
+)
 _SET_SCHEDULE_SCHEMA = {
-    vol.Required("days"): vol.All(cv.ensure_list, [vol.In(WEEK_DAYS)], vol.Length(min=1)),
-    vol.Required("periods"): vol.All(
-        cv.ensure_list,
-        [{vol.Required("until"): cv.string, vol.Required("temperature"): vol.Coerce(float)}],
-    ),
+    # One programme for all the given days, or (by_day) its own periods for each day.
+    vol.Optional("days"): vol.All(cv.ensure_list, [vol.In(WEEK_DAYS)], vol.Length(min=1)),
+    vol.Optional("periods"): _PERIODS,
+    vol.Optional("by_day"): {vol.In(WEEK_DAYS): _PERIODS},
     vol.Optional("dry_run", default=False): cv.boolean,
 }
 
@@ -102,10 +105,14 @@ async def async_setup_entry(
     )
 
 
-def _validated_slots(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Validate the requested periods and turn a problem into a translated service error."""
+def _validated_programme(
+    days: list[str] | None,
+    periods: list[dict[str, Any]] | None,
+    by_day: dict[str, list[dict[str, Any]]] | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Validate the request and turn a problem into a translated service error."""
     try:
-        return validate_periods(periods)
+        return plan_request(days, periods, by_day)
     except ScheduleError as err:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -223,21 +230,22 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             )
 
     async def async_set_schedule(
-        self, days: list[str], periods: list[dict[str, Any]], dry_run: bool = False
+        self,
+        days: list[str] | None = None,
+        periods: list[dict[str, Any]] | None = None,
+        by_day: dict[str, list[dict[str, Any]]] | None = None,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
-        """Write the same daily programme to the given days of a radiator thermostat."""
+        """Write the daily programme of the given days (or of ``by_day``) to a radiator thermostat."""
         if not self._device_state.is_thermostat:
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="schedule_radiator_only"
             )
-        slots = _validated_slots(periods)
-        days = list(dict.fromkeys(days))  # each day once, in the order given
+        programme = _validated_programme(days, periods, by_day)
         if dry_run:
-            return {"dry_run": True, "would_write": dict.fromkeys(days, slots)}
+            return {"dry_run": True, "would_write": programme}
         self._ensure_radio_time_left()
-        results = await self.coordinator.async_write_schedule(
-            self._device, dict.fromkeys(days, slots)
-        )
+        results = await self.coordinator.async_write_schedule(self._device, programme)
         failed = [day for day, result in results.items() if result == "failed"]
         if failed:
             raise HomeAssistantError(

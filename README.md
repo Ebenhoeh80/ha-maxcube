@@ -69,8 +69,8 @@ data:
 
 Each period gives the temperature that applies **until** the time shown; the last period must end at
 `24:00`. At most seven periods per day, times in steps of 5 minutes, temperatures in half degrees from
-4.5 ("off") to 30.5 ("on"). The same programme is written to every listed day; call the service again
-for other days. Add `dry_run: true` to only check the request: nothing is sent to the Cube.
+4.5 ("off") to 30.5 ("on"). The same programme is written to every listed day; for other periods on other days use
+`by_day` (see below). Add `dry_run: true` to only check the request: nothing is sent to the Cube.
 
 - After writing, the integration reads the programme back from the Cube and reports for each day whether
   the Cube now shows exactly what you asked for: `confirmed`, or `sent_not_confirmed` when the Cube took the
@@ -82,6 +82,39 @@ for other days. Add `dry_run: true` to only check the request: nothing is sent t
 - The programme only matters while a thermostat is in **Auto** mode.
 - The weekly programme is stored per thermostat. The MAX! software sets it per room; to keep a room
   consistent, select all radiator thermostats of the room as targets.
+
+### Different periods per day
+
+`by_day` gives each day its own periods, instead of `days` and `periods` (do not use them together):
+
+```yaml
+action: maxcube_local.set_schedule
+target:
+  entity_id: climate.kinderzimmer_thermostat_kinderzimmer
+data:
+  by_day:
+    monday: [{until: "24:00", temperature: 17}]
+    saturday: [{until: "08:00", temperature: 19}, {until: "24:00", temperature: 21}]
+```
+
+### Copy a programme to other thermostats
+
+`maxcube_local.copy_schedule` copies the programme of one radiator thermostat (`source`) to other radiator
+thermostats (`targets`), for all seven days or only for the days in `days`:
+
+```yaml
+action: maxcube_local.copy_schedule
+data:
+  source: climate.kinderzimmer_thermostat_kinderzimmer
+  targets: [climate.schlafzimmer_thermostat, climate.gaestezimmer_thermostat]
+  days: [saturday, sunday]   # optional, default: all seven days
+```
+
+Only the days that differ from a target's programme are written. Before the first radio telegram the
+integration estimates the radio time (about 2.8 % per telegram, added to the current duty cycle). If the
+Cube would reach 90 %, the request is refused and nothing is sent. The response gives the result per
+thermostat and day (`unchanged`, `confirmed`, `sent_not_confirmed` or `failed`). Source and targets must be
+radiator thermostats of the same Cube.
 
 ### Weekly programme card
 

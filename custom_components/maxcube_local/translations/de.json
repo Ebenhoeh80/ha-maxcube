@@ -121,19 +121,41 @@
     },
     "set_schedule": {
       "name": "Wochenprogramm setzen",
-      "description": "Schreibt dasselbe Tagesprogramm auf die gewählten Tage eines Heizkörperthermostats. Jeder Abschnitt gibt die Temperatur an, die bis zur genannten Uhrzeit gilt; der letzte Abschnitt muss um 24:00 enden (höchstens sieben Abschnitte, Zeiten in 5-Minuten-Schritten, Temperaturen in halben Grad von 4,5 bis 30,5). Wandthermostate lassen sich hier nicht programmieren.",
+      "description": "Schreibt ein Tagesprogramm auf die gewählten Tage eines Heizkörperthermostats oder je Tag ein eigenes Programm (by_day). Jeder Abschnitt gibt die Temperatur an, die bis zur genannten Uhrzeit gilt; der letzte Abschnitt muss um 24:00 enden (höchstens sieben Abschnitte, Zeiten in 5-Minuten-Schritten, Temperaturen in halben Grad von 4,5 bis 30,5). Wandthermostate lassen sich hier nicht programmieren.",
       "fields": {
         "days": {
           "name": "Tage",
-          "description": "Die Tage, die dieses Programm bekommen (monday bis sunday)."
+          "description": "Die Tage, die dieses Programm bekommen (monday bis sunday). Bei by_day weglassen."
         },
         "periods": {
           "name": "Abschnitte",
-          "description": "Eine Liste von Abschnitten, jeweils mit 'until' (HH:MM) und 'temperature'."
+          "description": "Eine Liste von Abschnitten, jeweils mit 'until' (HH:MM) und 'temperature'. Gilt für alle Tage in days."
+        },
+        "by_day": {
+          "name": "Abschnitte je Tag",
+          "description": "Die Abschnitte jedes Tages als Zuordnung von Tag zu seiner Abschnittsliste, zum Beispiel {monday: [...], saturday: [...]}. Statt days und periods verwenden."
         },
         "dry_run": {
           "name": "Nur prüfen",
           "description": "Prüft nur die Eingabe und zeigt, was geschrieben würde; es wird nichts an den Cube gesendet."
+        }
+      }
+    },
+    "copy_schedule": {
+      "name": "Wochenprogramm kopieren",
+      "description": "Kopiert das Wochenprogramm eines Heizkörperthermostats auf andere Heizkörperthermostate desselben Cubes. Geschrieben werden nur die Tage, die sich unterscheiden. Die Funkzeit wird vorher geprüft; würde sie knapp, wird nichts gesendet. Liefert das Ergebnis je Thermostat und Tag (unchanged, confirmed, sent_not_confirmed, failed).",
+      "fields": {
+        "source": {
+          "name": "Quelle",
+          "description": "Das Heizkörperthermostat, dessen Programm kopiert wird."
+        },
+        "targets": {
+          "name": "Ziele",
+          "description": "Die Heizkörperthermostate, die das Programm bekommen."
+        },
+        "days": {
+          "name": "Tage",
+          "description": "Nur diese Tage (monday bis sunday). Ohne Angabe werden alle sieben Tage berücksichtigt."
         }
       }
     }
@@ -171,6 +193,24 @@
     },
     "schedule_not_written": {
       "message": "Der Cube hat das Programm für diese Tage nicht übernommen: {days}."
+    },
+    "schedule_no_days": {
+      "message": "Nennen Sie mindestens einen Tag, oder geben Sie bei by_day die Abschnitte je Tag an."
+    },
+    "schedule_mixed_request": {
+      "message": "Verwenden Sie entweder days mit periods oder by_day, nicht beides."
+    },
+    "schedule_no_source_programme": {
+      "message": "Das Quellthermostat hat kein Programm für: {detail}."
+    },
+    "schedule_radio_too_busy": {
+      "message": "Das Kopieren würde den Cube auf etwa {detail} % Funkzeit bringen, das ist zu viel. Kopieren Sie weniger Tage oder auf weniger Thermostate, oder versuchen Sie es später erneut."
+    },
+    "schedule_other_cube": {
+      "message": "Quelle und Ziele müssen zum selben MAX! Cube gehören."
+    },
+    "schedule_not_a_device": {
+      "message": "{entity} ist kein MAX!-Thermostat dieser Integration."
     },
     "duplicate_cube": {
       "message": "Dieser MAX! Cube wird bereits vom Eintrag „{title}“ verwaltet. Bitte diesen doppelten Eintrag entfernen."

@@ -117,7 +117,8 @@ class MaxCubeStatusSensor(CoordinatorEntity[MaxCubeCoordinator], SensorEntity):
         self._key = key
         self._attr_translation_key = key
         self._attr_native_unit_of_measurement = unit
-        serial = coordinator.data.serial
+        # Only created when the Cube has a serial number (see async_setup_entry).
+        serial = coordinator.data.serial or ""
         self._attr_unique_id = f"{serial}_{key}"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, serial)})
 
