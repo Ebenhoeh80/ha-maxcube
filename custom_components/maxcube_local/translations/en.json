@@ -74,16 +74,16 @@
     },
     "binary_sensor": {
       "uninitialized": {
-        "name": "Not initialized"
+        "name": "Setup"
       },
       "device_error": {
-        "name": "Device error"
+        "name": "Device status"
       },
       "radio_fault": {
-        "name": "Radio fault"
+        "name": "Radio link"
       },
       "device_stale": {
-        "name": "No data received"
+        "name": "Data reception"
       }
     },
     "climate": {
@@ -189,7 +189,7 @@
     },
     "device_error": {
       "title": "Device reports an error: {name}",
-      "description": "The MAX! device {name} reports an error to the Cube. Check that it sits properly on the radiator valve, that its batteries are fine and that it is within radio range of the Cube."
+      "description": "The MAX! device {name} reports an error to the Cube. Check that it sits properly on the radiator valve, that its batteries are fine and that it is within radio range of the Cube. After a battery change this can last a few hours while the Cube sets the thermostat up again; the hint then goes away by itself."
     },
     "cube_unreachable": {
       "title": "MAX! Cube not reachable",

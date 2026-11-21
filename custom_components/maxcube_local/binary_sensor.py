@@ -79,8 +79,8 @@ class MaxCubeBattery(MaxCubeEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return True when the battery is low (maxcube-api: battery == 1)."""
-        return bool(getattr(self._device, "battery", 0))
+        """Return True when the battery is low (held for a while after the Cube stops reporting it)."""
+        return self.coordinator.battery_low(self._rf_address)
 
 
 class MaxCubeDeviceStatus(MaxCubeEntity, BinarySensorEntity):

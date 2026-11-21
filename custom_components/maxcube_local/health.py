@@ -11,6 +11,11 @@ ISSUE_ERROR = "device_error"
 ISSUE_UNREACHABLE = "cube_unreachable"
 ISSUE_RADIO_BUSY = "radio_busy"
 
+# The Cube reports the low-battery flag unevenly (it came and went within minutes for hours on a real
+# thermostat, most likely with the load of the valve motor), so a report is held this long after the
+# Cube has stopped sending it. Blips of up to five minutes were measured.
+BATTERY_HOLD = 15 * 60  # seconds
+
 # The Cube counts as lost when it has not answered for this long.
 UNREACHABLE_AFTER = 6 * 3600  # seconds
 # The radio is "busy" when the duty cycle stays at or above HIGH for SUSTAIN seconds; the hint goes
@@ -30,21 +35,56 @@ class DeviceFinding:
 
 
 def find_problems(
-    devices: Iterable[Any], status_of: Callable[[str], Any]
+    devices: Iterable[Any],
+    status_of: Callable[[str], Any],
+    battery_low: Callable[[str], bool] | None = None,
 ) -> list[DeviceFinding]:
     """Return the findings for all devices.
 
     ``status_of(rf_address)`` returns an object with an ``error`` attribute (``True``, ``False`` or
-    ``None`` while unknown). A low battery is taken from the device itself.
+    ``None`` while unknown). A low battery is taken from ``battery_low(rf_address)`` (see
+    :class:`BatteryHold`), or from the device itself if that is not given.
     """
     findings: list[DeviceFinding] = []
     for device in devices:
         name = device.name or device.rf_address
-        if getattr(device, "battery", 0):
+        low = (
+            battery_low(device.rf_address)
+            if battery_low is not None
+            else bool(getattr(device, "battery", 0))
+        )
+        if low:
             findings.append(DeviceFinding(ISSUE_BATTERY, device.rf_address, name))
         if status_of(device.rf_address).error:
             findings.append(DeviceFinding(ISSUE_ERROR, device.rf_address, name))
     return findings
+
+
+class BatteryHold:
+    """Keeps a low-battery report for a while after the Cube stops sending it.
+
+    It turns on at once and turns off only when the flag has been clear for ``hold`` seconds, so a
+    flag that comes and goes does not make the sensor, the repair hint and automations flap (an
+    automation that waits for "on for 30 minutes" would otherwise never fire).
+    """
+
+    def __init__(self, hold: float = BATTERY_HOLD) -> None:
+        """Set how long (seconds) a report is kept after the last time it was seen."""
+        self._hold = hold
+        self._last_low: dict[str, float] = {}
+
+    def update(self, rf_address: str, low: bool, now: float) -> bool:
+        """Feed one reading taken at ``now`` (seconds); return whether the battery counts as low."""
+        if low:
+            self._last_low[rf_address] = now
+            return True
+        last = self._last_low.get(rf_address)
+        if last is None:
+            return False
+        if now - last < self._hold:
+            return True
+        del self._last_low[rf_address]
+        return False
 
 
 class DutyCycleWatch:

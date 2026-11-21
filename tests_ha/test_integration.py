@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -282,7 +283,7 @@ async def test_the_entry_unloads_cleanly(
 
 
 async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
-    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
 ) -> None:
     from homeassistant.helpers import issue_registry as ir
 
@@ -298,6 +299,14 @@ async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
 
     cube.devices[0].battery = 0
     cube.errors[RADIATOR] = False
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    # The error hint is gone at once; the battery hint is held for a while (the Cube reports that flag
+    # unevenly) and goes when it has been clear for 15 minutes.
+    ids = {issue_id for (domain, issue_id) in registry.issues if domain == DOMAIN}
+    assert {i.split("_", 1)[1] for i in ids} == {f"battery_low_{RADIATOR}"}
+
+    freezer.tick(timedelta(minutes=16))
     await config_entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
     assert not [1 for (domain, _) in registry.issues if domain == DOMAIN]
@@ -1047,3 +1056,37 @@ async def test_the_lifecycle_leaves_no_tasks_or_listeners_behind(
     assert not second._verify_timers and not second._listeners
     assert second._unsub_refresh is None
     assert not [1 for (domain, _) in ir.async_get(hass).issues if domain == DOMAIN]
+
+
+async def test_a_low_battery_report_that_comes_and_goes_does_not_flap(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
+) -> None:
+    """The Cube reports the flag unevenly; the sensor stays on through a short gap and then clears."""
+    cube.devices[0].battery = 1
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    entity_id = _entity_id(hass, "binary_sensor", f"{RADIATOR}_battery")
+    assert hass.states.get(entity_id).state == "on"
+
+    cube.devices[0].battery = 0  # a gap of a few minutes, as measured on a real thermostat
+    freezer.tick(timedelta(minutes=5))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "on"
+
+    cube.devices[0].battery = 1
+    freezer.tick(timedelta(minutes=1))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "on"
+
+    cube.devices[0].battery = 0  # the batteries were changed: the flag stays away
+    freezer.tick(timedelta(minutes=14))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "on"
+
+    freezer.tick(timedelta(minutes=2))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "off"

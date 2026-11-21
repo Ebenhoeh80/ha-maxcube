@@ -34,6 +34,7 @@ from .const import (
     SCHEDULE_VERIFY_DELAY,
 )
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
+from .health import BatteryHold
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,6 +98,9 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         # Three missed polls before a device is considered stale.
         self.stale_after = max(3 * scan_interval, MIN_STALE_AFTER)
         self._cube: LinkStatusMaxCube | None = None
+        # Low-battery reports are held for a while (see ``BatteryHold``); read via ``battery_low``.
+        self._battery_hold = BatteryHold()
+        self._battery_low: dict[str, bool] = {}
 
     @property
     def cube(self) -> LinkStatusMaxCube:
@@ -146,10 +150,12 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         """Refresh all device states from the Cube."""
         if self._cube is None:
             self._cube = await self.hass.async_add_executor_job(self._connect)
+            self._update_battery(self._cube)
             return
         try:
             await self._async_poll(self._cube)
             self._check_identity(self._cube)
+            self._update_battery(self._cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
@@ -335,6 +341,18 @@ class MaxCubeCoordinator(DataUpdateCoordinator[None]):
         if self._cube is not None:
             await self.async_cube_call(self._cube.disconnect)
         await self.async_request_refresh()
+
+    def battery_low(self, rf_address: str) -> bool:
+        """Return whether a device's battery counts as low (held after the Cube stops reporting it)."""
+        return self._battery_low.get(rf_address, False)
+
+    def _update_battery(self, cube: LinkStatusMaxCube) -> None:
+        """Take the low-battery flags of the last poll into the held state."""
+        now = dt_util.utcnow().timestamp()
+        for device in cube.devices:
+            self._battery_low[device.rf_address] = self._battery_hold.update(
+                device.rf_address, bool(getattr(device, "battery", 0)), now
+            )
 
     def device_status(self, rf_address: str) -> DeviceStatus:
         """Return the RF link status for one device.

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-21
+
 ### Added
 - Lovelace card for the weekly heating programme, contributed by @helpmeifyoucan (#25). It is served by the
   integration itself (no resource to add), lists radiator thermostats only, sends only changed days and asks for
@@ -15,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The manifest now lists `frontend` and `http` as dependencies (both are part of every normal Home Assistant
   setup); they are needed to serve and load the card.
+
+## [1.5.1] - 2026-11-21
+
+### Changed
+- **The four status sensors of a device are named after what they report, not after the fault.** "Device error" is now
+  "Device status", "No data received" is "Data reception", "Not initialized" is "Setup" and "Radio fault" is
+  "Radio link" (German: Gerätezustand, Datenempfang, Einrichtung, Funkverbindung). They still show "OK" or "Problem";
+  what they report and their entity ids do not change.
+
+### Fixed
+- **A low-battery report is held for 15 minutes after the Cube stops sending it.** The Cube reports that flag unevenly (on a
+  real thermostat it came and went every few minutes for hours), so the sensor and the repair hint flapped, and an
+  automation waiting for "on for 30 minutes" could not fire.
+- The repair hint for a device error says that after a battery change it can take a few hours until the Cube has set the
+  thermostat up again.
 
 ## [1.5.0] - 2026-11-21
 

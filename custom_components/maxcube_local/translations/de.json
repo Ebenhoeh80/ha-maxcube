@@ -74,16 +74,16 @@
     },
     "binary_sensor": {
       "uninitialized": {
-        "name": "Nicht initialisiert"
+        "name": "Einrichtung"
       },
       "device_error": {
-        "name": "Gerätefehler"
+        "name": "Gerätezustand"
       },
       "radio_fault": {
-        "name": "Funkstörung"
+        "name": "Funkverbindung"
       },
       "device_stale": {
-        "name": "Keine Daten empfangen"
+        "name": "Datenempfang"
       }
     },
     "climate": {
@@ -189,7 +189,7 @@
     },
     "device_error": {
       "title": "Gerät meldet einen Fehler: {name}",
-      "description": "Das MAX!-Gerät {name} meldet dem Cube einen Fehler. Bitte prüfen, ob es richtig auf dem Heizkörperventil sitzt, die Batterien in Ordnung sind und es in Funkreichweite des Cubes liegt."
+      "description": "Das MAX!-Gerät {name} meldet dem Cube einen Fehler. Bitte prüfen, ob es richtig auf dem Heizkörperventil sitzt, die Batterien in Ordnung sind und es in Funkreichweite des Cubes liegt. Nach einem Batteriewechsel kann das einige Stunden dauern, bis der Cube das Thermostat wieder eingerichtet hat; der Hinweis verschwindet dann von selbst."
     },
     "cube_unreachable": {
       "title": "MAX! Cube nicht erreichbar",

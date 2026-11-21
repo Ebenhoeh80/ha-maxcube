@@ -99,7 +99,9 @@ class _IssueKeeper:
     def _update_device_hints(self) -> None:
         coordinator = self._coordinator
         current: dict[str, tuple[str, str]] = {}
-        for finding in find_problems(coordinator.cube.devices, coordinator.device_status):
+        for finding in find_problems(
+            coordinator.cube.devices, coordinator.device_status, coordinator.battery_low
+        ):
             issue_id = _issue_id(self._entry, finding.kind, finding.rf_address)
             current[issue_id] = (finding.kind, finding.name)
         for issue_id, (kind, name) in current.items():
