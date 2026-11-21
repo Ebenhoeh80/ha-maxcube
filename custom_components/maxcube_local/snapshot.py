@@ -8,12 +8,18 @@ objects and the Cube, as before.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-from maxcube.device import MaxDevice
+from maxcube.device import (
+    MAX_THERMOSTAT,
+    MAX_THERMOSTAT_PLUS,
+    MAX_WALL_THERMOSTAT,
+    MAX_WINDOW_SHUTTER,
+    MaxDevice,
+)
 
 from .linkstatus import DeviceStatus, LinkStatusMaxCube
 
@@ -28,7 +34,11 @@ _UNKNOWN_STATUS = DeviceStatus(
 
 @dataclass(frozen=True, slots=True)
 class DeviceState:
-    """The values of one MAX! device at the time of the poll. ``None`` means unknown."""
+    """The values of one MAX! device at the time of the poll. ``None`` means unknown.
+
+    ``battery_low`` is the held value (see ``health.BatteryHold``), ``battery_raw`` the flag as the
+    Cube sent it in this poll.
+    """
 
     rf_address: str
     kind: int | None = None
@@ -36,6 +46,7 @@ class DeviceState:
     name: str | None = None
     room_id: int | None = None
     battery_low: bool | None = None
+    battery_raw: bool | None = None
     mode: int | None = None
     target_temperature: float | None = None
     actual_temperature: float | None = None
@@ -48,6 +59,21 @@ class DeviceState:
     schedule: Schedule = ()
     status: DeviceStatus = _UNKNOWN_STATUS
 
+    @property
+    def is_thermostat(self) -> bool:
+        """Return True for a radiator thermostat (as ``MaxDevice.is_thermostat``)."""
+        return self.kind in (MAX_THERMOSTAT, MAX_THERMOSTAT_PLUS)
+
+    @property
+    def is_wallthermostat(self) -> bool:
+        """Return True for a wall thermostat."""
+        return self.kind == MAX_WALL_THERMOSTAT
+
+    @property
+    def is_windowshutter(self) -> bool:
+        """Return True for a window contact."""
+        return self.kind == MAX_WINDOW_SHUTTER
+
 
 @dataclass(frozen=True, slots=True)
 class CubeSnapshot:
@@ -58,6 +84,7 @@ class CubeSnapshot:
     duty_cycle: int | None
     free_memory_slots: int | None
     devices: Mapping[str, DeviceState]
+    room_names: Mapping[int, str]
 
     def device(self, rf_address: str) -> DeviceState:
         """Return the state of one device; a device that is not in this snapshot is unknown."""
@@ -68,15 +95,27 @@ class CubeSnapshot:
 
 
 def take_snapshot(
-    cube: LinkStatusMaxCube, stale_after: float, battery_low: Mapping[str, bool]
+    cube: LinkStatusMaxCube,
+    stale_after: float,
+    held_battery: Callable[[str, bool], bool],
 ) -> CubeSnapshot:
-    """Copy the values of the library objects; call it in the executor, right after a poll."""
+    """Copy the values of the library objects; call it in the executor, right after a poll.
+
+    ``held_battery(rf_address, raw_low)`` returns the low-battery state to show (the coordinator
+    feeds its ``BatteryHold`` with it, so it is called once per device and poll, in order).
+
+    The stale flag of a device is decided at this moment (``stale_after`` seconds after the last
+    frame of that device). While the Cube cannot be read, the snapshot of the last successful poll
+    stays in place: the entities are unavailable then, and their stale flags are not updated.
+    """
     devices: dict[str, DeviceState] = {}
     for device in cube.devices:
         rf_address = device.rf_address
+        raw_low = bool(getattr(device, "battery", 0))
         devices[rf_address] = _device_state(
             device,
-            battery_low=battery_low.get(rf_address),
+            battery_low=held_battery(rf_address, raw_low),
+            battery_raw=raw_low,
             status=cube.device_status(rf_address, stale_after),
         )
     return CubeSnapshot(
@@ -85,11 +124,12 @@ def take_snapshot(
         duty_cycle=getattr(cube, "duty_cycle", None),
         free_memory_slots=getattr(cube, "free_memory_slots", None),
         devices=MappingProxyType(devices),
+        room_names=MappingProxyType({room.id: room.name for room in getattr(cube, "rooms", [])}),
     )
 
 
 def _device_state(
-    device: MaxDevice, *, battery_low: bool | None, status: DeviceStatus
+    device: MaxDevice, *, battery_low: bool, battery_raw: bool, status: DeviceStatus
 ) -> DeviceState:
     """Copy the values of one library device; attributes a device kind does not have stay ``None``."""
     return DeviceState(
@@ -99,6 +139,7 @@ def _device_state(
         name=getattr(device, "name", None),
         room_id=getattr(device, "room_id", None),
         battery_low=battery_low,
+        battery_raw=battery_raw,
         mode=getattr(device, "mode", None),
         target_temperature=getattr(device, "target_temperature", None),
         actual_temperature=getattr(device, "actual_temperature", None),

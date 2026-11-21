@@ -103,9 +103,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         # Three missed polls before a device is considered stale.
         self.stale_after = max(3 * scan_interval, MIN_STALE_AFTER)
         self._cube: LinkStatusMaxCube | None = None
-        # Low-battery reports are held for a while (see ``BatteryHold``); read via ``battery_low``.
+        # Low-battery reports are held for a while (see ``BatteryHold``); the held value is in the snapshot.
         self._battery_hold = BatteryHold()
-        self._battery_low: dict[str, bool] = {}
 
     @property
     def cube(self) -> LinkStatusMaxCube:
@@ -347,30 +346,22 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         await self.async_request_refresh()
 
     def battery_low(self, rf_address: str) -> bool:
-        """Return whether a device's battery counts as low (held after the Cube stops reporting it)."""
-        return self._battery_low.get(rf_address, False)
-
-    def _take_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
-        """Take the low-battery flags of the last poll into the held state, then copy the Cube.
-
-        Runs in the executor, right after the poll, so the copy is made before the next poll can
-        change the library objects.
-        """
-        now = dt_util.utcnow().timestamp()
-        for device in cube.devices:
-            self._battery_low[device.rf_address] = self._battery_hold.update(
-                device.rf_address, bool(getattr(device, "battery", 0)), now
-            )
-        return take_snapshot(cube, self.stale_after, self._battery_low)
+        """Return the held low-battery state of one device as of the last poll (temporary wrapper)."""
+        return bool(self.data.device(rf_address).battery_low)
 
     def device_status(self, rf_address: str) -> DeviceStatus:
-        """Return the RF link status for one device.
+        """Return the RF link status of one device as of the last poll (temporary wrapper)."""
+        return self.data.device(rf_address).status
 
-        Falls back to an all-unknown, stale status while the Cube object has not
-        been built yet, so entities can always read a well-formed value.
+    def _take_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
+        """Copy the Cube into a snapshot; runs in the executor, right after the poll.
+
+        The copy is made before the next poll can change the library objects. The low-battery
+        flags go through ``BatteryHold`` here, so the held value is part of the snapshot.
         """
-        if self._cube is None:
-            return DeviceStatus(
-                initialized=None, error=None, link_error=None, last_heard=None, stale=True
-            )
-        return self._cube.device_status(rf_address, self.stale_after)
+        now = dt_util.utcnow().timestamp()
+        return take_snapshot(
+            cube,
+            self.stale_after,
+            lambda rf_address, low: self._battery_hold.update(rf_address, low, now),
+        )
