@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
 from homeassistant import components
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
@@ -14,13 +15,11 @@ from custom_components.maxcube_local import card
 from custom_components.maxcube_local.const import DOMAIN
 
 
+@pytest.mark.real_http
 async def test_the_card_file_is_served_and_added_to_the_extra_js_urls(
     hass: HomeAssistant, hass_client_no_auth
 ) -> None:
     assert card.CARD_FILE.is_file()
-    # The autouse fixture of conftest.py counts http as set up; here the real one is needed.
-    if "http" in hass.config.components:
-        hass.config.components.remove("http")
     assert await async_setup_component(hass, "http", {})
     frontend = MagicMock()
     with (

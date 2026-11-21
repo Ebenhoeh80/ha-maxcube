@@ -60,12 +60,15 @@ def _no_network_scan() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _no_card_registration(hass: HomeAssistant) -> Iterator[None]:
+def _no_card_registration(hass: HomeAssistant, request: pytest.FixtureRequest) -> Iterator[None]:
     """The integration depends on ``frontend`` and ``http``; the tests need neither.
 
     Both count as set up, and the card registration (tested in ``test_card.py``) is skipped, so the
     other tests do not need the Home Assistant frontend package.
     """
+    if request.node.get_closest_marker("real_http"):
+        yield
+        return
     hass.config.components.update({"frontend", "http"})
     with patch("custom_components.maxcube_local.async_register_card"):
         yield
