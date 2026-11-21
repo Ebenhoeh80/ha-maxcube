@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
@@ -96,10 +97,10 @@ async def _async_copy_schedule(hass: HomeAssistant, call: ServiceCall) -> Servic
     results = await coordinator.async_copy_schedule(
         source, [device for _, _, device in found.values()], call.data["days"]
     )
-    return {
-        entity_id: {"result": results[device.rf_address]}
-        for entity_id, (_, _, device) in found.items()
-    }
+    response: dict[str, Any] = {}
+    for entity_id, (_, _, device) in found.items():
+        response[entity_id] = {"result": dict(results[device.rf_address])}
+    return response
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
