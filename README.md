@@ -83,6 +83,25 @@ for other days. Add `dry_run: true` to only check the request: nothing is sent t
 - The weekly programme is stored per thermostat. The MAX! software sets it per room; to keep a room
   consistent, select all radiator thermostats of the room as targets.
 
+### Weekly programme card
+
+The integration ships a Lovelace card to view and edit the programme: it appears in the card picker as
+**MAX! Cube weekly programme** (no resource to add by hand; after an update press `Ctrl+Shift+R` so the
+browser loads the new file).
+
+```yaml
+type: custom:maxcube-schedule-card
+entity: climate.kinderzimmer_thermostat_kinderzimmer   # optional, the first thermostat is shown otherwise
+size: medium                                           # small | medium | large
+```
+
+Drag the zones to change times, edit the temperature or end time below, copy a day to other days, and
+select the thermostats to write to. Only radiator thermostats are listed (wall thermostats cannot be
+programmed). Nothing is sent without a change, and only the changed days are written. **Every day written
+to every thermostat is one radio message and uses about 2.8 % of the Cube's radio time**, so the card asks
+for confirmation before writing to more than one thermostat or more than three days. Use the dry-run
+option to check a programme without sending it. The card was contributed by @helpmeifyoucan.
+
 ---
 
 ## 📦 Requirements

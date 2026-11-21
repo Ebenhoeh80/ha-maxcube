@@ -85,6 +85,25 @@ gesendet.
 - Das Wochenprogramm wird je Thermostat gespeichert. Die MAX!-Software setzt es je Raum; damit ein Raum
   einheitlich bleibt, wähle alle Heizkörperthermostate des Raums als Ziel.
 
+### Karte für das Wochenprogramm
+
+Die Integration bringt eine Lovelace-Karte zum Ansehen und Bearbeiten des Programms mit: Sie erscheint im
+Kartenwähler als **MAX! Cube Wochenprogramm** (keine Ressource von Hand nötig; nach einem Update
+`Strg+Shift+R` drücken, damit der Browser die neue Datei lädt).
+
+```yaml
+type: custom:maxcube-schedule-card
+entity: climate.kinderzimmer_thermostat_kinderzimmer   # optional, sonst das erste Thermostat
+size: medium                                           # small | medium | large
+```
+
+Zonen lassen sich ziehen, Temperatur und Endzeit darunter eintippen, ein Tag auf andere Tage kopieren und die
+Thermostate zum Schreiben auswählen. Es werden nur Heizkörperthermostate angeboten (Wandthermostate lassen
+sich nicht programmieren). Ohne Änderung wird nichts gesendet, und es werden nur geänderte Tage geschrieben.
+**Jeder geschriebene Tag je Thermostat ist ein Funktelegramm und braucht etwa 2,8 % der Funkzeit des Cubes**;
+darum fragt die Karte vor dem Schreiben auf mehr als ein Thermostat oder mehr als drei Tage nach. Mit der
+Dry-Run-Option lässt sich ein Programm prüfen, ohne es zu senden. Die Karte stammt von @helpmeifyoucan.
+
 ---
 
 ## 📦 Voraussetzungen

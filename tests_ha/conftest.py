@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import HomeAssistant
 from maxcube.device import (
     MAX_DEVICE_MODE_MANUAL,
     MAX_THERMOSTAT,
@@ -55,6 +56,21 @@ def _enable_custom_integrations(enable_custom_integrations: None) -> None:
 def _no_network_scan() -> Iterator[None]:
     """The scan after startup would open a socket; the tests that want it patch it themselves."""
     with patch("custom_components.maxcube_local.discover_cubes", return_value=[]):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _no_card_registration(hass: HomeAssistant, request: pytest.FixtureRequest) -> Iterator[None]:
+    """The integration depends on ``frontend`` and ``http``; the tests need neither.
+
+    Both count as set up, and the card registration (tested in ``test_card.py``) is skipped, so the
+    other tests do not need the Home Assistant frontend package.
+    """
+    if request.node.get_closest_marker("real_http"):
+        yield
+        return
+    hass.config.components.update({"frontend", "http"})
+    with patch("custom_components.maxcube_local.async_register_card"):
         yield
 
 

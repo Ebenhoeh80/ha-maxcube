@@ -14,6 +14,7 @@ from homeassistant.helpers import discovery_flow
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
 
+from .card import async_register_card
 from .const import (
     CONF_CUBE_SERIAL,
     CONF_SCAN_INTERVAL,
@@ -43,7 +44,7 @@ _RECONNECT_SCHEMA = vol.Schema({vol.Optional("entry_id"): str})
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration-wide service."""
+    """Register the integration-wide service and the weekly-programme card."""
 
     async def _handle_reconnect(call: ServiceCall) -> None:
         """Close the connection to the Cube and read everything again."""
@@ -63,6 +64,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.services.async_register(
         DOMAIN, SERVICE_RECONNECT, _handle_reconnect, schema=_RECONNECT_SCHEMA
     )
+    await async_register_card(hass)
     # Offer Cubes on the network that are not set up yet (and update the address of known ones).
     async_at_started(hass, _async_scan_for_cubes)
     return True
