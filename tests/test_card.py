@@ -77,3 +77,17 @@ def test_sending_is_limited_to_changed_days_and_asks_for_many_telegrams() -> Non
     assert "RADIO_PERCENT_PER_TELEGRAM" in SOURCE
     assert "sent_not_confirmed" in SOURCE
     assert '"failed"' in SOURCE
+
+
+def test_the_card_reads_the_entity_keyed_service_response() -> None:
+    """An entity service answers {entity_id: {"result": {day: state}}} (return_response)."""
+    assert "return_response: true" in SOURCE
+    assert "res?.response?.[entity]" in SOURCE
+    assert "body.result?.[day]" in SOURCE
+
+
+def test_wall_thermostats_are_hidden_because_the_service_refuses_them() -> None:
+    assert "schedule_radiator_only" in (BASE / "climate.py").read_text(encoding="utf-8")
+    assert '"Wall Thermostat"' in (BASE / "const.py").read_text(encoding="utf-8")
+    assert "_isRadiator(" in SOURCE
+    assert "/wall/i" in SOURCE

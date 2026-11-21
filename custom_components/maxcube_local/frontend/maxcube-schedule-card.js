@@ -331,9 +331,21 @@ class MaxCubeScheduleCard extends HTMLElement {
       .filter((id) => id.startsWith("climate."))
       .filter((id) => {
         const a = this._hass.states[id]?.attributes;
-        return a && a.schedule !== undefined;
+        return a && a.schedule !== undefined && this._isRadiator(id);
       })
       .sort();
+  }
+
+  // The service set_schedule only accepts radiator thermostats (schedule_radiator_only), but a
+  // wall thermostat shows the programme of its room in the same attribute. Hide the wall
+  // thermostats and entities of other integrations that happen to have a schedule attribute.
+  _isRadiator(id) {
+    const entry = this._hass.entities?.[id];
+    if (entry?.platform && entry.platform !== "maxcube_local") return false;
+    const model = this._hass.devices?.[entry?.device_id]?.model;
+    if (model) return !/wall/i.test(model);
+    // Device registry not available: only radiator thermostats report a valve position.
+    return this._hass.states[id]?.attributes?.valve_position !== undefined;
   }
 
   _name(id) {
@@ -666,15 +678,20 @@ class MaxCubeScheduleCard extends HTMLElement {
   // Writes one day to one thermostat and returns the Cube's verdict for it.
   async _writeDay(entity, day) {
     const periods = this._periods(day).map((p) => ({ until: p.until, temperature: p.temp }));
-    const res = await this._hass.callService(
-      "maxcube_local",
-      "set_schedule",
-      { days: [day], periods, dry_run: this._dry },
-      { entity_id: entity }
-    );
-    if (this._dry) return "dry-run";
-    const payload = res?.response ?? res ?? {};
-    return payload.result?.[day] || "confirmed";
+    // callWS with return_response gives {context, response}; the response of an entity service
+    // is keyed by entity id: {"climate.x": {"result": {"monday": "confirmed"}}} (a dry run
+    // answers {"climate.x": {"dry_run": true, "would_write": {...}}}).
+    const res = await this._hass.callWS({
+      type: "call_service",
+      domain: "maxcube_local",
+      service: "set_schedule",
+      service_data: { days: [day], periods, dry_run: this._dry },
+      target: { entity_id: entity },
+      return_response: true,
+    });
+    const body = res?.response?.[entity] ?? {};
+    if (this._dry) return body.dry_run ? "dry-run" : "failed";
+    return body.result?.[day] || "failed";
   }
 
   _confirmSend(targets, days) {
