@@ -182,6 +182,7 @@ async def test_set_schedule_refuses_when_the_cube_is_busy(
 ) -> None:
     await _setup(hass, config_entry)
     cube.duty_cycle = 95
+    await config_entry.runtime_data.async_refresh()  # the check reads the snapshot of the last poll
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
             DOMAIN,
