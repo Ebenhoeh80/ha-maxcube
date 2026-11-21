@@ -506,7 +506,8 @@ async def test_the_climate_state_reflects_mode_valve_and_preset(
     coordinator = config_entry.runtime_data
 
     async def state():
-        coordinator.async_set_updated_data(None)
+        # A poll takes a new snapshot; the entity reads only that.
+        await coordinator.async_refresh()
         await hass.async_block_till_done()
         return hass.states.get(entity_id)
 
@@ -524,6 +525,24 @@ async def test_the_climate_state_reflects_mode_valve_and_preset(
     assert (await state()).attributes["preset_mode"] == "none"
     device.mode = MAX_DEVICE_MODE_BOOST
     assert (await state()).attributes["preset_mode"] == "boost"
+
+
+async def test_the_climate_entity_shows_the_values_of_the_last_poll(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """A change of a library object reaches the entity only with the next poll (snapshot)."""
+    device = cube.devices[0]
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, "climate", RADIATOR)
+    shown = hass.states.get(entity_id).attributes["temperature"]
+
+    device.target_temperature = 26.5
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).attributes["temperature"] == shown
+
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).attributes["temperature"] == 26.5
 
 
 async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(

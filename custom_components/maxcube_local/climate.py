@@ -33,6 +33,8 @@ from maxcube.device import (
     MAX_DEVICE_MODE_BOOST,
     MAX_DEVICE_MODE_MANUAL,
     MAX_DEVICE_MODE_VACATION,
+    MAX_THERMOSTAT,
+    MAX_THERMOSTAT_PLUS,
     MaxDevice,
 )
 
@@ -41,11 +43,12 @@ from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .schedule import (
     WEEK_DAYS,
-    Schedule,
     ScheduleError,
     scheduled_temperature,
     validate_periods,
 )
+from .snapshot import DeviceState, schedule_as_dict
+from .snapshot import Schedule as DeviceSchedule
 
 _SET_SCHEDULE_SCHEMA = {
     vol.Required("days"): vol.All(cv.ensure_list, [vol.In(WEEK_DAYS)], vol.Length(min=1)),
@@ -148,24 +151,29 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         self._attr_unique_id = device.rf_address
 
     @property
+    def _device_state(self) -> DeviceState:
+        """The values of this thermostat at the last poll; the entity reads nothing else."""
+        return self.coordinator.data.device(self._rf_address)
+
+    @property
     def min_temp(self) -> float:
         """Return the minimum target temperature."""
-        return self._device.min_temperature or MIN_TEMPERATURE
+        return self._device_state.min_temperature or MIN_TEMPERATURE
 
     @property
     def max_temp(self) -> float:
         """Return the maximum target temperature."""
-        return self._device.max_temperature or MAX_TEMPERATURE
+        return self._device_state.max_temperature or MAX_TEMPERATURE
 
     def _measured_temperature(self) -> float | None:
         """Return the measured temperature, if the device reports one."""
-        temp = self._device.actual_temperature
+        temp = self._device_state.actual_temperature
         # Radiator thermostats report 0 until they have measured at least once.
         return temp if temp else None
 
     def _target_temperature(self) -> float | None:
         """Return the target temperature."""
-        return self._device.target_temperature
+        return self._device_state.target_temperature
 
     if _NATIVE_TEMPERATURES:
 
@@ -192,27 +200,24 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             return self._target_temperature()
 
     @property
-    def _schedule(self) -> Schedule:
+    def _schedule(self) -> DeviceSchedule:
         """The weekly programme: the thermostat's own, or (wall thermostat) that of its room."""
-        schedule = getattr(self._device, "schedule", None)
-        if schedule:
-            return schedule
-        cube = self.coordinator.cube
-        room = cube.room_by_id(getattr(self._device, "room_id", None))
-        if room is not None:
-            for other in cube.devices_by_room(room):
-                schedule = getattr(other, "schedule", None)
-                if schedule:
-                    return schedule
-        return {}
+        state = self._device_state
+        if state.schedule:
+            return state.schedule
+        if state.room_id is not None:
+            for other in self.coordinator.data.devices.values():
+                if other.room_id == state.room_id and other.schedule:
+                    return other.schedule
+        return ()
 
     async def async_get_schedule(self) -> dict[str, Any]:
         """Return the weekly heating programme (service ``get_schedule``)."""
-        return self._schedule
+        return schedule_as_dict(self._schedule)
 
     def _ensure_radio_time_left(self) -> None:
         """Refuse to write while the Cube has used (almost) all of its radio time."""
-        duty = getattr(self.coordinator.cube, "duty_cycle", None)
+        duty = self.coordinator.data.duty_cycle
         if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -224,7 +229,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         self, days: list[str], periods: list[dict[str, Any]], dry_run: bool = False
     ) -> dict[str, Any]:
         """Write the same daily programme to the given days of a radiator thermostat."""
-        if not self._device.is_thermostat():
+        if self._device_state.kind not in (MAX_THERMOSTAT, MAX_THERMOSTAT_PLUS):
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="schedule_radiator_only"
             )
@@ -248,17 +253,18 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Expose the comfort/eco setpoints, the valve position and the weekly programme."""
-        device = self._device
+        state = self._device_state
         attrs: dict[str, Any] = {}
         schedule = self._schedule
         if schedule:
-            attrs["schedule"] = schedule
-            scheduled = scheduled_temperature(schedule, dt_util.now())
+            programme = schedule_as_dict(schedule)
+            attrs["schedule"] = programme
+            scheduled = scheduled_temperature(programme, dt_util.now())
             if scheduled is not None:
                 attrs["scheduled_temperature"] = scheduled
-        comfort = getattr(device, "comfort_temperature", None)
-        eco = getattr(device, "eco_temperature", None)
-        valve = getattr(device, "valve_position", None)
+        comfort = state.comfort_temperature
+        eco = state.eco_temperature
+        valve = state.valve_position
         if comfort is not None:
             attrs["comfort_temperature"] = comfort
         if eco is not None:
@@ -270,13 +276,10 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
-        device = self._device
-        if (
-            device.mode == MAX_DEVICE_MODE_MANUAL
-            and device.target_temperature == OFF_TEMPERATURE
-        ):
+        state = self._device_state
+        if state.mode == MAX_DEVICE_MODE_MANUAL and state.target_temperature == OFF_TEMPERATURE:
             return HVACMode.OFF
-        if device.mode == MAX_DEVICE_MODE_MANUAL:
+        if state.mode == MAX_DEVICE_MODE_MANUAL:
             return HVACMode.HEAT
         return HVACMode.AUTO
 
@@ -285,7 +288,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         """Return whether the valve is currently calling for heat."""
         if self.hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
-        valve = getattr(self._device, "valve_position", 0) or 0
+        valve = self._device_state.valve_position or 0
         if valve > 0:
             return HVACAction.HEATING
         return HVACAction.IDLE
@@ -293,18 +296,18 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     @property
     def preset_mode(self) -> str:
         """Return the current preset."""
-        device = self._device
-        if device.mode == MAX_DEVICE_MODE_BOOST:
+        state = self._device_state
+        if state.mode == MAX_DEVICE_MODE_BOOST:
             return PRESET_BOOST
-        if device.mode == MAX_DEVICE_MODE_VACATION:
+        if state.mode == MAX_DEVICE_MODE_VACATION:
             return PRESET_AWAY
-        if device.target_temperature == ON_TEMPERATURE:
+        if state.target_temperature == ON_TEMPERATURE:
             return PRESET_ON
-        comfort = getattr(device, "comfort_temperature", None)
-        eco = getattr(device, "eco_temperature", None)
-        if comfort and device.target_temperature == comfort:
+        comfort = state.comfort_temperature
+        eco = state.eco_temperature
+        if comfort and state.target_temperature == comfort:
             return PRESET_COMFORT
-        if eco and device.target_temperature == eco:
+        if eco and state.target_temperature == eco:
             return PRESET_ECO
         return PRESET_NONE
 
@@ -319,6 +322,8 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         if hvac_mode == HVACMode.OFF:
             await self._set_target_temperature(OFF_TEMPERATURE)
         elif hvac_mode == HVACMode.HEAT:
+            # Read from the library object, not the snapshot: the library updates it at once after
+            # a command, so "off" followed by "heat" within the refresh delay still sees the new value.
             target = self._device.target_temperature or self.min_temp
             await self._set_target_temperature(max(target, self.min_temp))
         elif hvac_mode == HVACMode.AUTO:
@@ -326,7 +331,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set a new preset mode."""
-        device = self._device
+        state = self._device_state
         if preset_mode == PRESET_BOOST:
             await self._set_mode(MAX_DEVICE_MODE_BOOST)
         elif preset_mode == PRESET_AWAY:
@@ -336,11 +341,11 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         elif preset_mode == PRESET_ON:
             await self._set_target_temperature(ON_TEMPERATURE)
         elif preset_mode == PRESET_COMFORT:
-            comfort = getattr(device, "comfort_temperature", None)
+            comfort = state.comfort_temperature
             if comfort:
                 await self._set_target_temperature(comfort)
         elif preset_mode == PRESET_ECO:
-            eco = getattr(device, "eco_temperature", None)
+            eco = state.eco_temperature
             if eco:
                 await self._set_target_temperature(eco)
 
