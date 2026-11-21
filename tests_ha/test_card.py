@@ -19,7 +19,8 @@ async def test_the_card_file_is_served_and_added_to_the_extra_js_urls(
 ) -> None:
     assert card.CARD_FILE.is_file()
     # The autouse fixture of conftest.py counts http as set up; here the real one is needed.
-    hass.config.components.discard("http")
+    if "http" in hass.config.components:
+        hass.config.components.remove("http")
     assert await async_setup_component(hass, "http", {})
     frontend = MagicMock()
     with (
