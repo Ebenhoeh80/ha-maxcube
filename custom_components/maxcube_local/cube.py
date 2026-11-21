@@ -111,9 +111,10 @@ class MaxCubeWithStatus(MaxCube):
     def parse_l_message(self, message: str) -> None:
         """Parse the L message entry by entry; every value is read within its own entry.
 
-        Replaces the library's loop, which reads up to 2 bytes past a 5-byte entry and up to 1 byte
-        past a 6-byte window entry, into the next entry or past the end of the message. A value that
-        an entry does not carry is set to ``None`` (unknown), not taken from a neighbouring entry.
+        Replaces the library's loop, which reads bytes +5 and +6 of every entry and, for thermostats,
+        up to +10, even when the entry is shorter (length byte 4 or 5). Those reads land in the next
+        entry or past the end of the message. A value that an entry does not carry is set to ``None``
+        (unknown), not taken from a neighbouring entry.
         """
         try:
             data = base64.b64decode(message)
@@ -125,43 +126,66 @@ class MaxCubeWithStatus(MaxCube):
                 self._apply_l_entry(device, entry)
 
     def _apply_l_entry(self, device: MaxDevice, entry: bytes) -> None:
-        """Set the values of one device from its L entry (offsets as in the library's ``parse_l_message``).
+        """Set the values of one device from its L entry.
 
-        Layout (offsets from the length byte): +5 bits1, +6 bits2 (mode in bits 1-0, battery low in
-        bit 7; absent on 5- and 6-byte entries), thermostat: +7 valve, +8 setpoint (bits 6-0, half
-        degrees), +9/+10 actual temperature (big endian, tenths of a degree, 0 = none); wall
-        thermostat: +8 bit 7 is the high bit of the actual temperature, +12 its low byte; window
-        contact: +6 bits 1-0 open (6-byte entries have no such byte and leave ``is_open`` as it is).
-
-        Thermostat in boost or vacation mode: the library sets ``actual_temperature`` to ``None``
-        there and this code does the same. The public description of the L message (Bouni,
-        max-cube-protocol, ``L-Message.md``) names bytes +9/+10 "date until" for the set
-        temperature and only says the actual temperature is "sometimes" there in auto mode. No
-        real Cube has confirmed what +9/+10 hold in boost or vacation, so they are not read there.
+        Offsets count from the length byte. Bits2 (+6, mode in bits 1-0, battery low in bit 7) exists
+        only if the length byte is 6 or more. An entry with length byte 4 (5 bytes, address only)
+        and one with length byte 5 (6 bytes, e.g. a window contact, bits1 at +5 but no bits2) leave
+        mode, battery and valve unknown (``None``). Offsets as in the library's ``parse_l_message``.
         """
-        has_flags = len(entry) > _L_BITS2
-        device.battery = self.resolve_device_battery(entry[_L_BITS2]) if has_flags else None
-
-        if device.is_thermostat() or device.is_wallthermostat():
-            device.mode = self.resolve_device_mode(entry[_L_BITS2]) if has_flags else None
-            has_setpoint = len(entry) > _L_SETPOINT
-            device.target_temperature = (entry[_L_SETPOINT] & 0x7F) / 2.0 if has_setpoint else None
-
+        has_bits2 = len(entry) > _L_BITS2
+        device.battery = self.resolve_device_battery(entry[_L_BITS2]) if has_bits2 else None
         if device.is_thermostat():
-            has_valve = len(entry) > _L_VALVE
-            device.valve_position = entry[_L_VALVE] if has_valve else None
-            device.actual_temperature = _thermostat_actual_temperature(entry, device.mode)
+            _apply_thermostat_values(self, device, entry)
+        elif device.is_wallthermostat():
+            _apply_wall_thermostat_values(self, device, entry)
+        elif device.is_windowshutter():
+            _apply_window_value(device, entry)
 
-        if device.is_wallthermostat():
-            has_actual = len(entry) > _L_WALL_ACTUAL_LOW
-            device.actual_temperature = (
-                (((entry[_L_SETPOINT] & 0x80) << 1) + entry[_L_WALL_ACTUAL_LOW]) / 10.0
-                if has_actual
-                else None
-            )
 
-        if device.is_windowshutter() and has_flags:
-            device.is_open = (entry[_L_BITS2] & 0x03) > 0
+def _apply_setpoint_and_mode(cube: MaxCubeWithStatus, device: MaxDevice, entry: bytes) -> None:
+    """Set the mode and target temperature of a thermostat or wall thermostat."""
+    has_bits2 = len(entry) > _L_BITS2
+    device.mode = cube.resolve_device_mode(entry[_L_BITS2]) if has_bits2 else None
+    has_setpoint = len(entry) > _L_SETPOINT
+    device.target_temperature = (entry[_L_SETPOINT] & 0x7F) / 2.0 if has_setpoint else None
+
+
+def _apply_thermostat_values(cube: MaxCubeWithStatus, device: MaxDevice, entry: bytes) -> None:
+    """Set the values of a radiator thermostat: valve, setpoint, mode and actual temperature.
+
+    The actual temperature is at +9/+10 (big endian, tenths of a degree, 0 = none). The library
+    sets it only in auto and manual mode and this code does the same: in boost or vacation mode
+    the library sets ``actual_temperature`` to ``None``. The public description of the L message
+    (Bouni, max-cube-protocol, ``L-Message.md``) names +9/+10 "date until" for the set temperature
+    and says the actual temperature is "sometimes" there in auto mode. No real Cube has confirmed
+    what +9/+10 hold in boost or vacation, so they are not read there.
+    """
+    _apply_setpoint_and_mode(cube, device, entry)
+    device.valve_position = entry[_L_VALVE] if len(entry) > _L_VALVE else None
+    device.actual_temperature = _thermostat_actual_temperature(entry, device.mode)
+
+
+def _apply_wall_thermostat_values(cube: MaxCubeWithStatus, device: MaxDevice, entry: bytes) -> None:
+    """Set the values of a wall thermostat: setpoint, mode and actual temperature.
+
+    The actual temperature has a high bit (+8, bit 7) and a low byte (+12), in tenths of a degree.
+    """
+    _apply_setpoint_and_mode(cube, device, entry)
+    if len(entry) > _L_WALL_ACTUAL_LOW:
+        high = (entry[_L_SETPOINT] & 0x80) << 1
+        device.actual_temperature = (high + entry[_L_WALL_ACTUAL_LOW]) / 10.0
+    else:
+        device.actual_temperature = None
+
+
+def _apply_window_value(device: MaxDevice, entry: bytes) -> None:
+    """Set ``is_open`` of a window contact from bits2 (+6, bits 1-0).
+
+    Only an entry with length byte 6 or more carries bits2. A shorter one leaves ``is_open`` as it is.
+    """
+    if len(entry) > _L_BITS2:
+        device.is_open = (entry[_L_BITS2] & 0x03) > 0
 
 
 def _thermostat_actual_temperature(entry: bytes, mode: int | None) -> float | None:

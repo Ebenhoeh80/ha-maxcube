@@ -70,7 +70,7 @@ BIT_ERROR = 1 << 3
 BIT_LINK_ERROR = 1 << 6
 
 # The library never flags a submessage shorter than this as malformed; it just
-# indexes into it.  Six bytes are the minimum that carries both flag bytes.
+# indexes into it.  A length byte of 6 is the minimum that carries bits2 (offset +6).
 MIN_SUBMESSAGE_LENGTH = 6
 
 
