@@ -100,7 +100,11 @@ class MaxCubeEntity(CoordinatorEntity[MaxCubeCoordinator]):
             identifiers={(DOMAIN, state.rf_address)},
             name=state.name or f"MAX! {state.rf_address}",
             manufacturer=MANUFACTURER,
-            model=DEVICE_TYPE_NAMES.get(state.kind, "MAX! Device"),
+            model=(
+                DEVICE_TYPE_NAMES.get(state.kind, "MAX! Device")
+                if state.kind is not None
+                else "MAX! Device"
+            ),
             serial_number=state.serial,
             suggested_area=suggested_area,
         )
