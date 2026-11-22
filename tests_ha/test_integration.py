@@ -292,6 +292,22 @@ async def test_the_entry_unloads_cleanly(
     assert config_entry.state is ConfigEntryState.NOT_LOADED
 
 
+async def test_disabling_the_integration_releases_the_cube_connection(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """The Cube serves one client: unloading must not leave the port occupied.
+
+    FakeCube models no connection state, so this is a spy on the release call; the library's
+    ``disconnect`` behaviour is covered by its own tests, not here.
+    """
+    await _setup(hass, config_entry)
+    before = cube.disconnects
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.NOT_LOADED
+    assert cube.disconnects == before + 1  # the shutdown frees the client slot
+
+
 async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
 ) -> None:
@@ -1129,6 +1145,62 @@ async def test_every_programme_write_keeps_one_check_and_no_callback_behind(
     assert len(config_entry._on_unload or []) == registered  # nothing added per write
     # The newest programme is the one that gets checked.
     assert coordinator._verify_days[RADIATOR]["monday"][0]["temp"] == 20.0
+
+
+async def test_an_unconfirmed_day_is_retried_once_and_then_only_warned(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
+) -> None:
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    from custom_components.maxcube_local.const import SCHEDULE_VERIFY_DELAY
+
+    await _setup(hass, config_entry)
+    cube.store_writes = False  # the Cube takes the message but keeps showing the old programme
+    coordinator = config_entry.runtime_data
+    await _write_monday(hass, _entity_id(hass, "climate", RADIATOR), 20.0)
+    assert len(cube.written) == 1
+    assert coordinator._verify_timers
+
+    freezer.tick(timedelta(seconds=SCHEDULE_VERIFY_DELAY))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert len(cube.written) == 2  # exactly one automatic retry
+    assert coordinator._verify_timers  # the retry gets its own final check
+
+    with patch("custom_components.maxcube_local.coordinator._LOGGER.warning") as warning:
+        freezer.tick(timedelta(seconds=SCHEDULE_VERIFY_DELAY))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    assert len(cube.written) == 2  # no endless retry loop
+    assert not coordinator._verify_timers
+    assert not coordinator._verify_days
+    assert not coordinator._verify_allow_retry
+    assert any("one retry" in str(call) for call in warning.call_args_list)
+
+
+async def test_a_retry_is_skipped_when_the_radio_duty_cycle_is_high(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
+) -> None:
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    from custom_components.maxcube_local.const import SCHEDULE_VERIFY_DELAY
+
+    await _setup(hass, config_entry)
+    cube.store_writes = False
+    coordinator = config_entry.runtime_data
+    await _write_monday(hass, _entity_id(hass, "climate", RADIATOR), 20.0)
+    assert len(cube.written) == 1
+
+    # Only the retry must be blocked; a high duty cycle at write time is rejected up front.
+    cube.duty_cycle = 95
+    freezer.tick(timedelta(seconds=SCHEDULE_VERIFY_DELAY))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert len(cube.written) == 1  # no write above the 90 % limit
+    assert not coordinator._verify_timers
 
 
 async def test_the_lifecycle_leaves_no_tasks_or_listeners_behind(
