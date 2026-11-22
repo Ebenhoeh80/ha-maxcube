@@ -1203,6 +1203,31 @@ async def test_a_retry_is_skipped_when_the_radio_duty_cycle_is_high(
     assert not coordinator._verify_timers
 
 
+async def test_shutdown_guard_blocks_writes_and_new_verification_timers(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """Once shutdown starts, no Cube write and no new 300 s check may be scheduled."""
+    await _setup(hass, config_entry)
+    cube.store_writes = False
+    coordinator = config_entry.runtime_data
+    await _write_monday(hass, _entity_id(hass, "climate", RADIATOR), 20.0)
+    device = cube.device_by_rf(RADIATOR)
+    days = copy.deepcopy(coordinator._verify_days[RADIATOR])
+    assert len(cube.written) == 1
+    coordinator._cancel_verifications()
+    assert not coordinator._verify_timers
+
+    coordinator._shutting_down = True
+    result = await coordinator.async_write_schedule(device, days)
+    assert all(status == "failed" for status in result.values())
+    assert len(cube.written) == 1  # the guard stops the write before the Cube sees it
+
+    coordinator._schedule_verification(device, days)
+    assert not coordinator._verify_timers
+    assert not coordinator._verify_days
+    assert not coordinator._verify_allow_retry
+
+
 async def test_the_lifecycle_leaves_no_tasks_or_listeners_behind(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:

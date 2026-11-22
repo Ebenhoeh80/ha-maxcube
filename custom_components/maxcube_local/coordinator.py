@@ -324,6 +324,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         ``allow_retry=False`` is used for that one automatic resend; the second check only warns.
         """
         async with self._write_lock:
+            if self._shutting_down:
+                return dict.fromkeys(days, "failed")
             sent = await self.async_cube_call(self._send_days, device, days)
             await self.async_refresh()
         stored = getattr(device, "schedule", None) or {}
@@ -429,6 +431,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         (the newer programme of a day wins) and restarts the wait, so nothing is verified twice and
         no callback is left behind for every write. A new user write re-enables the single retry.
         """
+        if self._shutting_down:
+            return
         address = device.rf_address
         cancel = self._verify_timers.pop(address, None)
         if cancel is not None:
@@ -440,6 +444,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             self._verify_timers.pop(address, None)
             days = self._verify_days.pop(address, {})
             allow = self._verify_allow_retry.pop(address, False)
+            if self._shutting_down:
+                return
             await self._async_verify_schedule(device, days, allow_retry=allow)
 
         self._verify_timers[address] = async_call_later(
@@ -517,6 +523,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
                 ", ".join(differing),
                 err,
             )
+            return
+        if self._shutting_down:
             return
         refused = [day for day, status in result.items() if status == "failed"]
         if refused:
