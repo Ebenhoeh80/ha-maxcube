@@ -19,6 +19,10 @@ from .health import (
     find_problems,
 )
 
+# The hint about the M message appears after this many polls in a row without a readable one.
+ISSUE_M_MESSAGE = "m_message_missing"
+M_MESSAGE_HINT_AFTER = 3
+
 
 def _issue_id(entry: MaxCubeConfigEntry, kind: str, rf_address: str) -> str:
     return f"{entry.entry_id}_{kind}_{rf_address}"
@@ -36,6 +40,7 @@ class _IssueKeeper:
         self._cancel_timer: Callable[[], None] | None = None
         self._unreachable = False
         self._busy = False
+        self._m_message = False
 
     @callback
     def update(self) -> None:
@@ -45,6 +50,7 @@ class _IssueKeeper:
             self._set_unreachable(False)
             duty = self._coordinator.data.duty_cycle
             self._set_busy(self._watch.update(duty, monotonic()))
+            self._set_m_message(self._coordinator.m_missing_polls >= M_MESSAGE_HINT_AFTER)
         elif self._cancel_timer is None and not self._unreachable:
             # Listeners hear about the first failure only, so the clock runs from here.
             self._cancel_timer = async_call_later(
@@ -61,6 +67,7 @@ class _IssueKeeper:
         self._clear_timer()
         self._set_unreachable(False)
         self._set_busy(False)
+        self._set_m_message(False)
 
     def _clear_timer(self) -> None:
         cancel, self._cancel_timer = self._cancel_timer, None
@@ -79,6 +86,10 @@ class _IssueKeeper:
     def _set_busy(self, wanted: bool) -> None:
         self._set_cube_issue(ISSUE_RADIO_BUSY, self._busy, wanted)
         self._busy = wanted
+
+    def _set_m_message(self, wanted: bool) -> None:
+        self._set_cube_issue(ISSUE_M_MESSAGE, self._m_message, wanted)
+        self._m_message = wanted
 
     def _set_cube_issue(self, kind: str, present: bool, wanted: bool) -> None:
         """Create or delete one of the hints about the Cube itself (only on a change)."""

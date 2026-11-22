@@ -238,6 +238,10 @@
     "radio_busy": {
       "title": "MAX! Cube: Funkzeit fast aufgebraucht",
       "description": "Die Funkauslastung von {title} liegt seit einiger Zeit bei 90 % oder mehr. Bei 100 % sendet der Cube etwa eine Stunde lang keine Befehle an die Thermostate. Vermeiden Sie vorerst viele schnelle Änderungen und Programm-Schreibvorgänge. Der Hinweis verschwindet, sobald der Wert unter 80 % gefallen ist."
+    },
+    "m_message_missing": {
+      "title": "MAX! Cube liefert keine Geräteliste",
+      "description": "Der Cube liefert seine Geräte- und Raumliste nicht. Die Integration nutzt die zuletzt gespeicherte Liste. Raum- und Gerätenamen sowie seitdem neu gekoppelte Geräte werden erst nach einer gültigen Antwort übernommen. Die Ursache ist unbekannt; ein Neustart des Cube (Netzteil 10 Sekunden lang trennen) oder die MAX!-Software kann helfen. Der Hinweis verschwindet von selbst, sobald der Cube wieder eine gültige Liste sendet."
     }
   }
 }

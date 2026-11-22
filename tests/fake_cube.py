@@ -210,6 +210,8 @@ class FakeCube:
         self.firmware = firmware
         self.duty_cycle = 0
         self.free_slots = 50
+        # True: the M line is sent empty (``M:``), as the real Cube did for some time.
+        self.empty_m = False
         self.rooms: list[FakeRoom] = []
         self.devices: list[FakeDevice] = []
         # Payloads of the radio commands (``s:``) as hex, in the order the client sent them.
@@ -235,6 +237,11 @@ class FakeCube:
         device = FakeDevice(rf_address, name, serial, room_id, kind, **state)
         with self._lock:
             self.devices.append(device)
+
+    def set_empty_m(self, empty: bool) -> None:
+        """Send the M line (rooms and devices) empty, as ``M:`` with no argument, or in full again."""
+        with self._lock:
+            self.empty_m = empty
 
     def set_duty_cycle(self, duty_cycle: int, free_slots: int | None = None) -> None:
         """Set the radio duty cycle (percent) and the free memory slots of the H message."""
@@ -298,7 +305,7 @@ class FakeCube:
         with self._lock:
             lines = [
                 build_h_line(self.serial, self.firmware, self.duty_cycle, self.free_slots),
-                build_m_line(self.devices, self.rooms),
+                "M:" if self.empty_m else build_m_line(self.devices, self.rooms),
             ]
             lines += [build_c_line(d) for d in self.devices if d.kind != "window"]
             lines.append(build_l_line(self.devices))

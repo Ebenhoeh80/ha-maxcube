@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+import struct
+from collections.abc import Callable
+from datetime import datetime
 
-from maxcube.cube import MaxCube
+from maxcube.cube import DEFAULT_PORT, MaxCube
 from maxcube.device import MAX_DEVICE_MODE_AUTOMATIC, MAX_DEVICE_MODE_MANUAL, MaxDevice
 from maxcube.thermostat import MaxThermostat
 
@@ -68,11 +71,45 @@ def parse_h_status(message: str) -> tuple[int | None, int | None]:
     return duty, _hex_field(tokens, _FREE_SLOTS_FIELD)
 
 
+# The library reads only the third field of the M argument (``index,count,data``).
+_M_ARGUMENT_PREFIX = "0,1,"
+_M_FIELD_INDEX = 2  # the Base64 data is the third field
+
+
+def _readable_m_payload(payload: str) -> bool:
+    """Return True if the Base64 part of an M message decodes to some bytes."""
+    if not payload:
+        return False
+    try:
+        return len(base64.b64decode(payload, validate=True)) > 0
+    except ValueError:  # binascii.Error is a ValueError
+        return False
+
+
 class MaxCubeWithStatus(MaxCube):
-    """A ``MaxCube`` that exposes ``duty_cycle``, ``free_memory_slots`` and exact schedules."""
+    """A ``MaxCube`` that exposes ``duty_cycle``, ``free_memory_slots`` and exact schedules.
+
+    It also keeps the last readable M message (rooms and devices). Some Cubes send ``M:`` with no
+    argument; the library then reads no rooms and no devices, so the remembered message is used.
+    ``last_m_message`` is the Base64 part only; the integration saves it between restarts.
+    """
 
     duty_cycle: int | None = None
     free_memory_slots: int | None = None
+    last_m_message: str | None = None
+    # True when the last M message was empty or unreadable (see ``parse_m_message``).
+    m_message_missing: bool = False
+
+    def __init__(
+        self,
+        host: str,
+        port: int = DEFAULT_PORT,
+        now: Callable[[], datetime] = datetime.now,
+        last_m_message: str | None = None,
+    ) -> None:
+        # Set before super().__init__(): it reads the Cube, and the M message is parsed then.
+        self.last_m_message = last_m_message
+        super().__init__(host, port, now)
 
     def write_day_schedule(
         self, thermostat: MaxThermostat, day: str, slots: list[dict]
@@ -102,6 +139,30 @@ class MaxCubeWithStatus(MaxCube):
                 device.schedule = parse_week_program(base64.b64decode(payload)[PROGRAMME_OFFSET:])
         except (ValueError, binascii.Error):
             pass  # a message we cannot read leaves the previous schedule in place
+
+    def parse_m_message(self, message: str) -> None:
+        """Parse the M message; if it is empty or unreadable, use the remembered one.
+
+        A readable message is parsed as the library does and remembered. The library updates the
+        rooms and devices it finds by id and address, so parsing a message again does not create
+        them twice and keeps the values already read. An empty or unreadable message (or one the
+        library cannot parse) leaves ``m_message_missing`` set; the remembered message is parsed
+        instead, if there is one, and nothing at all if there is none.
+        """
+        parts = message.split(",")
+        payload = parts[_M_FIELD_INDEX] if len(parts) > _M_FIELD_INDEX else ""
+        if _readable_m_payload(payload):
+            try:
+                super().parse_m_message(message)
+            except (IndexError, ValueError, struct.error):
+                pass  # decodes, but its content is not an M message: treat it as unreadable
+            else:
+                self.last_m_message = payload
+                self.m_message_missing = False
+                return
+        self.m_message_missing = True
+        if self.last_m_message:
+            super().parse_m_message(_M_ARGUMENT_PREFIX + self.last_m_message)
 
     def parse_h_message(self, message: str) -> None:
         """Parse the H message as the library does, and keep the Cube's status values."""

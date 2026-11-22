@@ -103,6 +103,7 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
         host: str,
         port: int = DEFAULT_PORT,
         now: Callable[[], datetime] = datetime.now,
+        last_m_message: str | None = None,
     ) -> None:
         # Must be set before super().__init__(): it calls update(), which calls
         # parse_l_message(), which writes into these dictionaries.
@@ -111,7 +112,7 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
         self.link_error: dict[str, bool] = {}
         self.last_heard: dict[str, datetime] = {}
         self.raw_flags: dict[str, str] = {}
-        super().__init__(host, port, now)
+        super().__init__(host, port, now, last_m_message)
 
     def parse_l_message(self, message: str) -> None:
         """Parse an ``L`` message, then recover the discarded flag bits."""

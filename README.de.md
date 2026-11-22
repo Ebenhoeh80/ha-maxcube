@@ -246,6 +246,10 @@ Home Assistant werden sofort gesendet und bei der nächsten Abfrage zurückgeles
 | Programmänderung nicht sichtbar | Der Cube zeigt sie nach etwa zwei Minuten; Attribut `schedule` später erneut ansehen. |
 | Schreiben abgelehnt (Funkauslastung) | Der Cube hat 90 % seiner Funkzeit genutzt. Warten; bei 100 % sendet er etwa eine Stunde nichts. |
 
+### Cube liefert keine Geräteliste
+
+Manche Cubes senden ihre Raum- und Geräteliste leer. Die Integration nutzt dann die zuletzt gespeicherte Liste; sie wird mit dem Eintrag gespeichert und mit ihm gelöscht. Raum- und Gerätenamen sowie seitdem neu gekoppelte Geräte werden übernommen, sobald der Cube wieder eine gültige Liste sendet. Bleibt der Reparaturhinweis *MAX! Cube liefert keine Geräteliste*, den Cube neu starten (Netzteil 10 Sekunden lang trennen) oder den Cube in der MAX!-Software prüfen.
+
 ## 🗑️ Entfernen
 
 **Einstellungen → Geräte & Dienste → eQ-3 MAX! Cube → ⋮ → Löschen.** Der Cube und seine Geräte verschwinden aus Home

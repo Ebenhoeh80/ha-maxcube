@@ -241,6 +241,10 @@ sent immediately and read back at the next poll.
 | Programme change not visible | The Cube shows it after about two minutes; look at the `schedule` attribute again. |
 | Write refused (duty cycle) | The Cube used 90 % of its radio time. Wait; at 100 % it sends nothing for about an hour. |
 
+### Cube sends no device list
+
+Some Cubes send their list of rooms and devices empty. The integration then uses the last list it saved, which is kept with the entry and deleted with it. Room and device names, and devices paired since then, are taken over once the Cube sends a valid list. If the repair hint *MAX! Cube sends no device list* stays, restart the Cube (disconnect its power supply for 10 seconds) or check the Cube in the MAX! software.
+
 ## 🗑️ Removal
 
 **Settings → Devices & Services → eQ-3 MAX! Cube → ⋮ → Delete.** The Cube and its devices are removed from

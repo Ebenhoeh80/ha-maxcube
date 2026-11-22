@@ -918,6 +918,81 @@ async def test_no_identifier_appears_anywhere_in_the_diagnostics(hass: HomeAssis
     assert "192.168" not in report
 
 
+def _m_storage_key(entry: MockConfigEntry) -> str:
+    return f"maxcube_local_{entry.entry_id}_m_message"
+
+
+def _saved_m_message(entry: MockConfigEntry, m_message: str) -> dict:
+    """What the storage file looks like after the coordinator saved the M message."""
+    return {
+        "version": 1,
+        "minor_version": 1,
+        "key": _m_storage_key(entry),
+        "data": {"m_message": m_message, "saved": "2026-11-01T00:00:00+00:00"},
+    }
+
+
+async def test_the_saved_m_message_is_handed_to_the_cube_before_the_first_poll(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, hass_storage: dict
+) -> None:
+    hass_storage[_m_storage_key(config_entry)] = _saved_m_message(config_entry, "SAVED")
+    seen: list[dict] = []
+
+    def build(*args: object, **kwargs: object) -> FakeCube:
+        seen.append(dict(kwargs))
+        return cube
+
+    config_entry.add_to_hass(hass)
+    with patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", build):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+    assert seen and seen[0]["last_m_message"] == "SAVED"
+
+
+async def test_a_changed_m_message_is_saved_after_a_short_delay(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, hass_storage: dict
+) -> None:
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup(hass, config_entry)
+    cube.last_m_message = "NEWER"
+    await config_entry.runtime_data.async_refresh()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=1))
+    await hass.async_block_till_done()
+    assert hass_storage[_m_storage_key(config_entry)]["data"]["m_message"] == "NEWER"
+
+
+async def test_the_missing_m_message_gets_a_repair_hint_after_three_polls(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    cube.m_message_missing = True
+    for _ in range(2):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        assert "m_message_missing_cube" not in _cube_issues(hass)
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert "m_message_missing_cube" in _cube_issues(hass)
+
+    cube.m_message_missing = False
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert "m_message_missing_cube" not in _cube_issues(hass)
+
+
+async def test_removing_the_entry_deletes_the_saved_m_message(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, hass_storage: dict
+) -> None:
+    hass_storage[_m_storage_key(config_entry)] = _saved_m_message(config_entry, "SAVED")
+    await _setup(hass, config_entry)
+    assert await hass.config_entries.async_remove(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert _m_storage_key(config_entry) not in hass_storage
+
+
 def _cube_issues(hass: HomeAssistant) -> set[str]:
     from homeassistant.helpers import issue_registry as ir
 

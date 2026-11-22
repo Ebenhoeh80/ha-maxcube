@@ -21,6 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from maxcube.device import MaxDevice
@@ -28,10 +29,12 @@ from maxcube.device import MaxDevice
 from .const import (
     CONF_CUBE_SERIAL,
     DOMAIN,
+    M_MESSAGE_SAVE_DELAY,
     POLL_RETRY_DELAY,
     REDISCOVER_COOLDOWN,
     REQUEST_REFRESH_COOLDOWN,
     SCHEDULE_VERIFY_DELAY,
+    STORAGE_VERSION,
 )
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .health import BatteryHold
@@ -52,6 +55,11 @@ MIN_STALE_AFTER = 90
 
 class WrongCubeError(OSError):
     """A different Cube than the one of this entry answers at the saved address."""
+
+
+def m_message_storage_key(entry_id: str) -> str:
+    """Return the name of the file that keeps the last readable M message of an entry."""
+    return f"{DOMAIN}_{entry_id}_m_message"
 
 
 class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
@@ -106,6 +114,13 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         self._cube: LinkStatusMaxCube | None = None
         # Low-battery reports are held for a while (see ``BatteryHold``); the held value is in the snapshot.
         self._battery_hold = BatteryHold()
+        # The last readable M message, saved between restarts (see ``_remember_m_message``).
+        self._store: Store[dict[str, str]] = Store(
+            hass, STORAGE_VERSION, m_message_storage_key(entry.entry_id)
+        )
+        self._saved_m_message: str | None = None
+        # Polls in a row in which the Cube sent no readable M message (see ``issues.py``).
+        self.m_missing_polls = 0
 
     @property
     def cube(self) -> LinkStatusMaxCube:
@@ -116,7 +131,9 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
 
     def _connect(self) -> LinkStatusMaxCube:
         """Build the MaxCube; the constructor performs the initial read (blocking)."""
-        cube = LinkStatusMaxCube(self._host, self._port, now=dt_util.now)
+        cube = LinkStatusMaxCube(
+            self._host, self._port, now=dt_util.now, last_m_message=self._saved_m_message
+        )
         try:
             self._check_identity(cube)
         except WrongCubeError:
@@ -136,11 +153,14 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             )
 
     async def _async_setup(self) -> None:
-        """Open the connection once before the first refresh.
+        """Load the saved M message, then open the connection once before the first refresh.
 
         If the saved address does not answer, the Cube is looked up by its serial number: it may
         have got a new address while Home Assistant was not running or while the Cube was off.
         """
+        stored = await self._store.async_load()
+        if isinstance(stored, dict) and isinstance(stored.get("m_message"), str):
+            self._saved_m_message = stored["m_message"]
         try:
             self._cube = await self.hass.async_add_executor_job(self._connect)
         except (OSError, TimeoutError) as err:
@@ -155,10 +175,12 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         """Refresh all device states from the Cube and return the snapshot of this poll."""
         if self._cube is None:
             self._cube = await self.hass.async_add_executor_job(self._connect)
+            self._remember_m_message(self._cube)
             return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
         try:
             await self._async_poll(self._cube)
             self._check_identity(self._cube)
+            self._remember_m_message(self._cube)
             return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
@@ -166,6 +188,26 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
                     "The MAX! Cube has a new IP address; reloading with the new address"
                 ) from err
             raise UpdateFailed(f"Error communicating with MAX! Cube: {err}") from err
+
+    def _remember_m_message(self, cube: LinkStatusMaxCube) -> None:
+        """Count the polls without a readable M message and save a new one when it changes.
+
+        The file is written only when the message changes (not on every poll), and the write is
+        delayed, so a burst of changes costs one write.
+        """
+        self.m_missing_polls = self.m_missing_polls + 1 if cube.m_message_missing else 0
+        message = cube.last_m_message
+        if message and message != self._saved_m_message:
+            self._saved_m_message = message
+            self._store.async_delay_save(self._m_message_data, M_MESSAGE_SAVE_DELAY)
+
+    @callback
+    def _m_message_data(self) -> dict[str, str]:
+        """The data written to the file: the Base64 part of the M message and when it was saved."""
+        return {
+            "m_message": self._saved_m_message or "",
+            "saved": dt_util.utcnow().isoformat(),
+        }
 
     async def _async_locked_call(self, func: Callable[..., T], *args: object) -> T:
         """Run a blocking Cube call in the executor, one call at a time (errors pass through)."""

@@ -238,6 +238,10 @@
     "radio_busy": {
       "title": "MAX! Cube radio time almost used up",
       "description": "The radio duty cycle of {title} has been at 90 % or more for some time. At 100 % the Cube stops sending commands to the thermostats for about an hour. Avoid many quick changes and programme writes for now. The hint goes away once the value has fallen below 80 %."
+    },
+    "m_message_missing": {
+      "title": "MAX! Cube sends no device list",
+      "description": "The Cube does not send its list of rooms and devices. The integration uses the last list it saved. Room and device names, and devices paired since then, are taken over only after a valid answer. The cause is unknown; restarting the Cube (disconnect its power supply for 10 seconds) or the MAX! software may help. The hint goes away by itself as soon as the Cube sends a valid list."
     }
   }
 }

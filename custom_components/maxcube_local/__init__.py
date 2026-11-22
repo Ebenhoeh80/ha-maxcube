@@ -21,6 +21,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import discovery_flow
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from maxcube.device import MaxDevice
 
@@ -35,8 +36,9 @@ from .const import (
     MANUFACTURER,
     SERVICE_COPY_SCHEDULE,
     SERVICE_RECONNECT,
+    STORAGE_VERSION,
 )
-from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
+from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator, m_message_storage_key
 from .discovery import discover_cubes, is_reachable
 from .identity import cube_title, is_generated_title
 from .issues import async_setup_issues
@@ -309,3 +311,8 @@ async def async_remove_config_entry_device(
 async def async_unload_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: MaxCubeConfigEntry) -> None:
+    """Delete the saved M message of an entry that is removed."""
+    await Store(hass, STORAGE_VERSION, m_message_storage_key(entry.entry_id)).async_remove()

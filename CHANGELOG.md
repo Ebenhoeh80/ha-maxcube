@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-22
+
+### Fixed
+- A Cube that sends its rooms and devices as an empty `M:` line no longer loses its devices after a restart. The last readable list is saved and used; a repair hint appears when the Cube sends no readable list for three polls in a row and goes away with the next readable one.
+
 ## [1.7.0] - 2026-11-21
 
 ### Added
