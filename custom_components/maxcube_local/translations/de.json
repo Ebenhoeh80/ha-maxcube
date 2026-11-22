@@ -59,6 +59,12 @@
     "button": {
       "reboot": {
         "name": "Neustart"
+      },
+      "show_room_temperature": {
+        "name": "Raumtemperatur anzeigen"
+      },
+      "show_setpoint": {
+        "name": "Solltemperatur anzeigen"
       }
     },
     "sensor": {
@@ -202,6 +208,9 @@
     },
     "schedule_no_source_programme": {
       "message": "Das Quellthermostat hat kein Programm für: {detail}."
+    },
+    "display_radio_too_busy": {
+      "message": "Der Cube ist für eine weitere Funknachricht zu ausgelastet (etwa {detail} % Funkzeit). Versuchen Sie es später erneut."
     },
     "schedule_radio_too_busy": {
       "message": "Das Kopieren würde den Cube auf etwa {detail} % Funkzeit bringen, das ist zu viel. Kopieren Sie weniger Tage oder auf weniger Thermostate, oder versuchen Sie es später erneut."

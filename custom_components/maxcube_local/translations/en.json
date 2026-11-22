@@ -59,6 +59,12 @@
     "button": {
       "reboot": {
         "name": "Restart"
+      },
+      "show_room_temperature": {
+        "name": "Show room temperature"
+      },
+      "show_setpoint": {
+        "name": "Show setpoint"
       }
     },
     "sensor": {
@@ -202,6 +208,9 @@
     },
     "schedule_no_source_programme": {
       "message": "The source thermostat has no programme for: {detail}."
+    },
+    "display_radio_too_busy": {
+      "message": "The Cube is too busy for one more radio message (about {detail} % of its radio time). Try again later."
     },
     "schedule_radio_too_busy": {
       "message": "The copy would take the Cube to about {detail} % of its radio time, which is too much. Copy fewer days or to fewer thermostats, or try again later."

@@ -139,6 +139,16 @@ Dry-Run-Option lässt sich ein Programm prüfen, ohne es zu senden. Die Karte st
 
 ---
 
+## 🌡️ Anzeige am Wandthermostat
+
+Das Display eines Wandthermostats zeigt entweder die Solltemperatur (Standard) oder die gemessene Raumtemperatur.
+Pro Wandthermostat schalten zwei Schaltflächen um: **Raumtemperatur anzeigen** und **Solltemperatur anzeigen**. Jeder
+Druck sendet ein Funktelegramm. Ist der Cube schon bei 90 % Funkzeit, wird der Druck abgelehnt. Den aktuellen
+Zustand kann der Cube nicht melden, daher zeigt die Integration dafür keinen Zustand an. Heizkörperthermostate haben
+diese Einstellung nicht.
+
+---
+
 ## 📦 Voraussetzungen
 
 - Ein **eQ-3 MAX! Cube LAN-Gateway**, im Netzwerk erreichbar (Standard-Port `62910`).
