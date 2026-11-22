@@ -524,6 +524,10 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
                 err,
             )
             return
+        self._warn_about_retry_result(name, result)
+
+    def _warn_about_retry_result(self, name: str, result: dict[str, str]) -> None:
+        """Report a refused retry, unless the coordinator is already shutting down."""
         if self._shutting_down:
             return
         refused = [day for day, status in result.items() if status == "failed"]
