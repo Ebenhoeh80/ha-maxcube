@@ -73,6 +73,7 @@ def parse_h_status(message: str) -> tuple[int | None, int | None]:
 
 # The library reads only the third field of the M argument (``index,count,data``).
 _M_ARGUMENT_PREFIX = "0,1,"
+_M_FIELD_INDEX = 2  # the Base64 data is the third field
 
 
 def _readable_m_payload(payload: str) -> bool:
@@ -149,7 +150,7 @@ class MaxCubeWithStatus(MaxCube):
         instead, if there is one, and nothing at all if there is none.
         """
         parts = message.split(",")
-        payload = parts[2] if len(parts) >= 3 else ""
+        payload = parts[_M_FIELD_INDEX] if len(parts) > _M_FIELD_INDEX else ""
         if _readable_m_payload(payload):
             try:
                 super().parse_m_message(message)

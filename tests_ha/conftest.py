@@ -163,6 +163,9 @@ class FakeCube:
         self.firmware_version = "01.13"
         self.duty_cycle: int | None = 12
         self.free_memory_slots: int | None = 50
+        # The M message as the real cube keeps it: the Base64 part, and the missing flag.
+        self.last_m_message: str | None = None
+        self.m_message_missing = False
         room = MaxRoom()
         room.id = 1
         room.name = "Bad"

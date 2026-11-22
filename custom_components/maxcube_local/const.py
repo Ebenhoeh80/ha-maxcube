@@ -30,6 +30,10 @@ POLL_RETRY_DELAY = 1.0  # seconds
 # After a command the state is read back at once; further read-backs within this time are merged.
 # (Home Assistant's default is 10 s, which leaves the second of two quick changes unseen for that long.)
 REQUEST_REFRESH_COOLDOWN = 2.0  # seconds
+# The last readable M message (rooms and devices) is saved so that a restart has the devices even
+# while the Cube sends its M line empty. Stored per entry as "maxcube_local_<entry id>_m_message".
+STORAGE_VERSION = 1
+M_MESSAGE_SAVE_DELAY = 10  # seconds, the write is delayed and merged
 
 MANUFACTURER = "eQ-3"
 
