@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-22
+
 ### Added
-- Two buttons per wall thermostat, `Show room temperature` and `Show setpoint`, set what its display shows. Each press sends one radio telegram. It is refused, and nothing is sent, when the Cube is at 90 % of its radio time. The current setting cannot be read back from the Cube, so the integration shows no state for it.
+- Two buttons per wall thermostat, `Show room temperature` and `Show setpoint`, set what its display shows. Each press sends one radio telegram. It is refused, and nothing is sent, when the Cube is at 90 % of its radio time. The current setting cannot be read back from the Cube, so the integration shows no state for it. The telegram is not verified on a real wall thermostat yet (taken from the protocol description and the official software).
 
 ## [1.7.1] - 2026-11-22
 
