@@ -30,6 +30,7 @@ from .const import (
     CONF_CUBE_SERIAL,
     DOMAIN,
     M_MESSAGE_SAVE_DELAY,
+    MAX_DUTY_CYCLE_FOR_WRITING,
     POLL_RETRY_DELAY,
     REDISCOVER_COOLDOWN,
     REQUEST_REFRESH_COOLDOWN,
@@ -103,6 +104,12 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         # Pending "was the programme taken?" checks, one timer per device (see async_write_schedule).
         self._verify_timers: dict[str, Callable[[], None]] = {}
         self._verify_days: dict[str, dict[str, list[dict]]] = {}
+        # Whether the pending check may resend once. A retry clears it so a second
+        # check only warns instead of writing again (no endless retry loop).
+        self._verify_allow_retry: dict[str, bool] = {}
+        # Set before anything is awaited in async_shutdown: an already running verification
+        # callback must not start a new write while the entry is going away.
+        self._shutting_down = False
         entry.async_on_unload(self._cancel_verifications)
         # What the last polls cost (shown in the diagnostics).
         self.last_poll_ms: int | None = None
@@ -306,17 +313,19 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         return {day: self.cube.write_day_schedule(device, day, slots) for day, slots in days.items()}
 
     async def async_write_schedule(
-        self, device: MaxDevice, days: dict[str, list[dict]]
+        self, device: MaxDevice, days: dict[str, list[dict]], *, allow_retry: bool = True
     ) -> dict[str, str]:
         """Write the programme of the given days and check, by reading it back, what arrived.
 
         Returns ``{day: "confirmed" | "sent_not_confirmed" | "failed"}``. ``confirmed`` means the
         Cube already reports exactly the requested programme. ``sent_not_confirmed`` means the Cube
         took the message but still shows the old programme: it updates its copy only after the
-        thermostat has taken the change (about two minutes), so these days are checked again later
-        and a warning is logged if they still differ.
+        thermostat has taken the change (about two minutes), so these days are checked again later.
+        ``allow_retry=False`` is used for that one automatic resend; the second check only warns.
         """
         async with self._write_lock:
+            if self._shutting_down:
+                return dict.fromkeys(days, "failed")
             sent = await self.async_cube_call(self._send_days, device, days)
             await self.async_refresh()
         stored = getattr(device, "schedule", None) or {}
@@ -328,7 +337,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
                 results[day] = "sent_not_confirmed" if sent[day] else "failed"
         pending = {day: days[day] for day, result in results.items() if result == "sent_not_confirmed"}
         if pending:
-            self._schedule_verification(device, pending)
+            self._schedule_verification(device, pending, allow_retry=allow_retry)
         return results
 
     async def async_set_display(self, rf_address: str, show_actual: bool) -> None:
@@ -413,23 +422,31 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             )
         return results
 
-    def _schedule_verification(self, device: MaxDevice, pending: dict[str, list[dict]]) -> None:
+    def _schedule_verification(
+        self, device: MaxDevice, pending: dict[str, list[dict]], *, allow_retry: bool = True
+    ) -> None:
         """Check the days in ``pending`` again later; one timer per device, replaced by a new write.
 
         A second write to the same device before the check merges its days into the same check
         (the newer programme of a day wins) and restarts the wait, so nothing is verified twice and
-        no callback is left behind for every write.
+        no callback is left behind for every write. A new user write re-enables the single retry.
         """
+        if self._shutting_down:
+            return
         address = device.rf_address
         cancel = self._verify_timers.pop(address, None)
         if cancel is not None:
             cancel()
         self._verify_days[address] = {**self._verify_days.get(address, {}), **pending}
+        self._verify_allow_retry[address] = self._verify_allow_retry.get(address, False) or allow_retry
 
         async def _verify(_now: datetime) -> None:
             self._verify_timers.pop(address, None)
             days = self._verify_days.pop(address, {})
-            await self._async_verify_schedule(device, days)
+            allow = self._verify_allow_retry.pop(address, False)
+            if self._shutting_down:
+                return
+            await self._async_verify_schedule(device, days, allow_retry=allow)
 
         self._verify_timers[address] = async_call_later(
             self.hass, SCHEDULE_VERIFY_DELAY, _verify
@@ -442,26 +459,83 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             cancel()
         self._verify_timers.clear()
         self._verify_days.clear()
+        self._verify_allow_retry.clear()
 
     async def async_shutdown(self) -> None:
-        """Stop the coordinator, including the pending programme checks."""
+        """Stop the coordinator and release the Cube's single client slot.
+
+        The library already disconnects after every poll and command when
+        ``use_persistent_connection`` is false, so this explicit call is normally a no-op. It is a
+        defensive release for the case that a connection object still holds a socket. It waits for
+        an in-flight call via ``_io_lock``; it cannot free the port before that call finishes.
+        ``disconnect`` sends ``q:``, closes the socket and never raises on network errors.
+        """
+        self._shutting_down = True
+        # Also needed when Home Assistant stops without unloading the entry first.
         self._cancel_verifications()
         await super().async_shutdown()
+        if self._cube is not None:
+            await self.async_cube_call(self._cube.disconnect)
 
     async def _async_verify_schedule(
-        self, device: MaxDevice, days: dict[str, list[dict]]
+        self, device: MaxDevice, days: dict[str, list[dict]], *, allow_retry: bool = True
     ) -> None:
-        """Check again, a few minutes after a write, whether the Cube shows the new programme."""
+        """Check again after a write; resend once if the Cube still shows the old programme."""
         await self.async_refresh()
+        if self._shutting_down:
+            return
         stored = getattr(device, "schedule", None) or {}
-        differing = [day for day, slots in days.items() if stored.get(day) != slots]
-        if differing:
+        differing = {day: days[day] for day in days if stored.get(day) != days[day]}
+        if not differing:
+            return
+        name = getattr(device, "name", device.rf_address)
+        if not allow_retry:
             _LOGGER.warning(
-                "The Cube still shows the old weekly programme of %s for %s, %d s after it was sent. "
-                "The thermostat may not have taken it (check its batteries and its range to the Cube)",
-                getattr(device, "name", device.rf_address),
+                "The Cube still shows the old weekly programme of %s for %s, %d s after it was sent "
+                "and one retry. The thermostat may not have taken it (check its batteries and its "
+                "range to the Cube)",
+                name,
                 ", ".join(differing),
-                SCHEDULE_VERIFY_DELAY,
+                2 * SCHEDULE_VERIFY_DELAY,
+            )
+            return
+        duty = getattr(self.cube, "duty_cycle", None)
+        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
+            _LOGGER.warning(
+                "Not retrying the weekly programme of %s for %s: radio duty cycle is %d %%",
+                name,
+                ", ".join(differing),
+                duty,
+            )
+            return
+        _LOGGER.info(
+            "Retrying the weekly programme of %s for %s once: the Cube still shows the old one",
+            name,
+            ", ".join(differing),
+        )
+        # The retry clears ``allow_retry``; its own check will only warn, never write again.
+        try:
+            result = await self.async_write_schedule(device, differing, allow_retry=False)
+        except HomeAssistantError as err:
+            _LOGGER.warning(
+                "Could not retry the weekly programme of %s for %s: %s",
+                name,
+                ", ".join(differing),
+                err,
+            )
+            return
+        self._warn_about_retry_result(name, result)
+
+    def _warn_about_retry_result(self, name: str, result: dict[str, str]) -> None:
+        """Report a refused retry, unless the coordinator is already shutting down."""
+        if self._shutting_down:
+            return
+        refused = [day for day, status in result.items() if status == "failed"]
+        if refused:
+            _LOGGER.warning(
+                "The Cube refused the retry of the weekly programme of %s for %s",
+                name,
+                ", ".join(refused),
             )
 
     async def async_reconnect(self) -> None:

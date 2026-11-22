@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A weekly programme that the Cube has not taken is resent once.** After a write the Cube often still shows the old
+  programme until the thermostat confirms it. That check now repeats the write once (never above the 90 % radio limit);
+  its own follow-up check only warns. A new write by the user re-enables the single retry. No endless retry loop.
+- **A defensive release of the Cube's client slot on shutdown.** Every poll and command already closes its own short
+  connection, so the extra `disconnect` is normally a no-op. It waits for an in-flight call to finish before releasing
+  a socket that may still be held; it cannot free the port earlier than that.
+- **A weekly-programme check already in flight stops at shutdown.** Guards prevent a retry write and a new verification
+  timer from being armed while the entry is going away.
+
 ## [1.8.0] - 2026-11-22
 
 ### Added
