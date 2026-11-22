@@ -137,6 +137,15 @@ option to check a programme without sending it. The card was contributed by @hel
 
 ---
 
+## 🌡️ Wall thermostat display
+
+The display of a wall thermostat shows either its setpoint (the default) or the measured room temperature.
+Per wall thermostat, two buttons switch it: **Show room temperature** and **Show setpoint**. Each press sends one
+radio telegram. If the Cube is already at 90 % of its radio time, the press is refused. The Cube cannot report the
+current setting, so the integration shows no state for it. Radiator thermostats have no such setting.
+
+---
+
 ## 📦 Requirements
 
 - An **eQ-3 MAX! Cube LAN gateway** reachable on your network (default port `62910`).
