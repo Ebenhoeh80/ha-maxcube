@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-11-22
+
 ### Fixed
 - **A weekly programme that the Cube has not taken is resent once.** After a write the Cube often still shows the old
   programme until the thermostat confirms it. That check now repeats the write once (never above the 90 % radio limit);

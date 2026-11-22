@@ -14,5 +14,5 @@
   "loggers": ["maxcube"],
   "quality_scale": "gold",
   "requirements": ["maxcube-api>=0.4.3"],
-  "version": "1.8.0"
+  "version": "1.8.1"
 }
