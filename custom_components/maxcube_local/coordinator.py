@@ -331,6 +331,21 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             self._schedule_verification(device, pending)
         return results
 
+    async def async_set_display(self, rf_address: str, show_actual: bool) -> None:
+        """Send the display setting of a wall thermostat, unless the Cube is too busy for one more telegram.
+
+        The duty cycle is the one of the last poll; the check is the same as the one for a programme copy.
+        """
+        try:
+            check_radio_budget(self.data.duty_cycle, 1)
+        except ScheduleError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="display_radio_too_busy",
+                translation_placeholders={"detail": err.detail},
+            ) from err
+        await self.async_cube_command(self.cube.write_display_setting, rf_address, show_actual)
+
     def _copy_plans(
         self, source: DeviceState, targets: list[DeviceState], days: list[str]
     ) -> dict[str, dict[str, list[dict]]]:

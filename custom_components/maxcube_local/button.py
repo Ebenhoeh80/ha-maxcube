@@ -21,10 +21,14 @@ import socket
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from maxcube.device import MaxDevice
 
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
+from .entity import MaxCubeEntity, async_add_devices_as_they_appear
+from .snapshot import DeviceState
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +57,23 @@ async def async_setup_entry(
     """Set up the reboot button for a MAX! Cube."""
     coordinator = entry.runtime_data
     async_add_entities([MaxCubeRebootButton(coordinator)])
+    async_add_devices_as_they_appear(entry, async_add_entities, _display_buttons)
+
+
+def _display_buttons(
+    coordinator: MaxCubeCoordinator, state: DeviceState, device: MaxDevice
+) -> list[Entity]:
+    """Two buttons per wall thermostat: show the room temperature, or show the setpoint.
+
+    Radiator thermostats have no display setting, so they get no buttons. The current setting can not
+    be read back from the Cube, so no state is shown (see ``display.py``).
+    """
+    if not state.is_wallthermostat:
+        return []
+    return [
+        MaxCubeDisplayButton(coordinator, state, device, key=key, show_actual=show_actual)
+        for key, show_actual in (("show_room_temperature", True), ("show_setpoint", False))
+    ]
 
 
 class MaxCubeRebootButton(ButtonEntity):
@@ -106,3 +127,25 @@ class MaxCubeRebootButton(ButtonEntity):
         finally:
             sock.close()
 
+
+class MaxCubeDisplayButton(MaxCubeEntity, ButtonEntity):
+    """Sets what a wall thermostat shows on its display: the room temperature or the setpoint."""
+
+    def __init__(
+        self,
+        coordinator: MaxCubeCoordinator,
+        state: DeviceState,
+        device: MaxDevice,
+        *,
+        key: str,
+        show_actual: bool,
+    ) -> None:
+        """Initialize the button on the wall thermostat's device."""
+        super().__init__(coordinator, state, device)
+        self._show_actual = show_actual
+        self._attr_translation_key = key
+        self._attr_unique_id = f"{state.serial or state.rf_address}_{key}"
+
+    async def async_press(self) -> None:
+        """Send the display setting to the wall thermostat (checked against the radio budget first)."""
+        await self.coordinator.async_set_display(self._rf_address, self._show_actual)

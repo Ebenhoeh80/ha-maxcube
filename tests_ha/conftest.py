@@ -188,6 +188,7 @@ class FakeCube:
         self.command_error: type[OSError] | None = None
         self.accept_commands = True
         self.written: list[tuple[str, str, list[dict[str, Any]]]] = []
+        self.displays: list[tuple[str, bool]] = []  # (rf address, show actual temperature)
 
     @contextmanager
     def _in_use(self) -> Iterator[None]:
@@ -253,6 +254,13 @@ class FakeCube:
         with self._in_use():
             self._check_command()
             device.mode = mode
+        return self.accept_commands
+
+    def write_display_setting(self, rf_address: str, show_actual: bool) -> bool:
+        device = self.device_by_rf(rf_address)
+        if device is None or not device.is_wallthermostat():
+            return False
+        self.displays.append((rf_address, show_actual))
         return self.accept_commands
 
 

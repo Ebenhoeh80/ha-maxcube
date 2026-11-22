@@ -1351,3 +1351,37 @@ async def test_copy_schedule_only_takes_maxcube_entities(
             return_response=True,
         )
     assert cube.written == []
+
+
+async def test_the_wall_thermostat_has_two_display_buttons_and_the_radiator_none(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    wall_serial = "KEQ2222222"
+    assert _entity_id(hass, "button", f"{wall_serial}_show_room_temperature")
+    assert _entity_id(hass, "button", f"{wall_serial}_show_setpoint")
+    radiator_serial = "KEQ1111111"
+    assert er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{radiator_serial}_show_setpoint") is None
+
+
+async def test_a_display_button_sends_the_setting_to_the_wall_thermostat(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    room = _entity_id(hass, "button", "KEQ2222222_show_room_temperature")
+    setpoint = _entity_id(hass, "button", "KEQ2222222_show_setpoint")
+    await hass.services.async_call("button", "press", {"entity_id": room}, blocking=True)
+    await hass.services.async_call("button", "press", {"entity_id": setpoint}, blocking=True)
+    assert cube.displays == [(WALL, True), (WALL, False)]
+
+
+async def test_a_display_button_is_refused_when_the_cube_is_busy(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    cube.duty_cycle = 95
+    await config_entry.runtime_data.async_refresh()  # the check reads the snapshot of the last poll
+    room = _entity_id(hass, "button", "KEQ2222222_show_room_temperature")
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call("button", "press", {"entity_id": room}, blocking=True)
+    assert cube.displays == []
