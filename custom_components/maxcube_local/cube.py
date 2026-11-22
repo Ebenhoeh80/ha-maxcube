@@ -19,6 +19,7 @@ from maxcube.cube import DEFAULT_PORT, MaxCube
 from maxcube.device import MAX_DEVICE_MODE_AUTOMATIC, MAX_DEVICE_MODE_MANUAL, MaxDevice
 from maxcube.thermostat import MaxThermostat
 
+from .display import encode_display_setting
 from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
 
 _DUTY_CYCLE_FIELD = 5
@@ -122,6 +123,19 @@ class MaxCubeWithStatus(MaxCube):
         short day with one byte instead of two, so the message would be too short.
         """
         message = encode_set_programme(thermostat.rf_address, thermostat.room_id, day, slots)
+        commander = self._MaxCube__commander  # the library's private connection handler
+        return bool(commander.send_radio_msg(message))
+
+    def write_display_setting(self, rf_address: str, show_actual: bool) -> bool:
+        """Send the display setting to a wall thermostat; True if the Cube took the telegram.
+
+        ``show_actual`` True shows the measured room temperature, False the setpoint (see ``display.py``).
+        Nothing is sent to an address that is not a wall thermostat of the Cube.
+        """
+        device = self.device_by_rf(rf_address)
+        if device is None or not device.is_wallthermostat():
+            return False
+        message = encode_display_setting(rf_address, show_actual)
         commander = self._MaxCube__commander  # the library's private connection handler
         return bool(commander.send_radio_msg(message))
 
