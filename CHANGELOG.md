@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A defensive release of the Cube's client slot on shutdown.** Every poll and command already closes its own short
   connection, so the extra `disconnect` is normally a no-op. It waits for an in-flight call to finish before releasing
   a socket that may still be held; it cannot free the port earlier than that.
+- **A weekly-programme check already in flight stops at shutdown.** Guards prevent a retry write and a new verification
+  timer from being armed while the entry is going away.
 
 ## [1.8.0] - 2026-11-22
 
