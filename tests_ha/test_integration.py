@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
+import threading
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -67,6 +69,54 @@ async def test_setup_creates_the_entities_and_the_hub_device(
     hub = device_for_identifier(hass, (DOMAIN, CUBE_SERIAL), config_entry.entry_id)
     assert hub is not None
     assert hub.sw_version == "01.13"
+
+
+async def test_window_state_is_unknown_when_the_cube_does_not_report_it(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    window = next(device for device in cube.devices if device.rf_address == WINDOW)
+    window.is_open = None  # a 6-byte contact telegram carries no open/closed bit
+    await config_entry.runtime_data.async_refresh()
+    state = hass.states.get(_entity_id(hass, "binary_sensor", WINDOW))
+    assert state is not None
+    assert state.state == "unknown"
+
+
+async def test_a_cancelled_cube_call_still_serialises_the_next_one(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """Cancelling a task must not let the next call overlap on the single-client port."""
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    started = threading.Event()
+    release = threading.Event()
+    order: list[str] = []
+
+    def slow() -> bool:
+        order.append("slow-start")
+        started.set()
+        assert release.wait(10)  # bounded: a failed test must not leave a non-daemon thread behind
+        order.append("slow-end")
+        return True
+
+    def quick() -> bool:
+        order.append("quick")
+        return True
+
+    queued: asyncio.Task[bool] | None = None
+    task = asyncio.create_task(coordinator.async_cube_call(slow))
+    try:
+        assert await asyncio.to_thread(started.wait, 10)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        # The executor thread is still inside slow(); this call can only run after it finishes.
+        queued = asyncio.create_task(coordinator.async_cube_call(quick))
+    finally:
+        release.set()
+    assert await asyncio.wait_for(queued, 10) is True
+    assert order == ["slow-start", "slow-end", "quick"]
 
 
 async def test_the_cube_status_sensors_show_the_values_of_the_cube(
@@ -308,6 +358,80 @@ async def test_disabling_the_integration_releases_the_cube_connection(
     assert cube.disconnects == before + 1  # the shutdown frees the client slot
 
 
+async def test_shutdown_drains_a_running_call_and_rejects_new_work(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    started = threading.Event()
+    release = threading.Event()
+    order: list[str] = []
+
+    def slow() -> bool:
+        order.append("slow-start")
+        started.set()
+        assert release.wait(10)  # bounded: a failed test must not leave a non-daemon thread behind
+        order.append("slow-end")
+        return True
+
+    unload: asyncio.Task[bool] | None = None
+    before = cube.disconnects
+    task = asyncio.create_task(coordinator.async_cube_call(slow))
+    try:
+        assert await asyncio.to_thread(started.wait, 10)
+        # The disconnect is queued behind the running call; order below proves the drain.
+        unload = asyncio.create_task(hass.config_entries.async_unload(config_entry.entry_id))
+    finally:
+        release.set()
+    assert await asyncio.wait_for(unload, 10)
+    assert await asyncio.wait_for(task, 10)
+    assert order == ["slow-start", "slow-end"]
+    assert cube.disconnects == before + 1
+    with pytest.raises(HomeAssistantError, match="shutting down"):
+        await coordinator.async_cube_call(lambda: True)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError("socket already closed"),
+        TimeoutError("disconnect timed out"),
+        HomeAssistantError("worker already closed"),
+    ],
+)
+async def test_shutdown_survives_a_failing_disconnect(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, error: Exception
+) -> None:
+    await _setup(hass, config_entry)
+    with patch.object(cube, "disconnect", side_effect=error):
+        assert await hass.config_entries.async_unload(config_entry.entry_id)
+    assert config_entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_parallel_shutdowns_release_the_cube_once(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    before = cube.disconnects
+    await asyncio.gather(coordinator.async_shutdown(), coordinator.async_shutdown())
+    assert cube.disconnects == before + 1
+
+
+async def test_a_refresh_racing_shutdown_is_rejected_before_any_cube_call(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    await _setup(hass, config_entry)
+    coordinator = config_entry.runtime_data
+    before = cube.disconnects
+    coordinator._shutting_down = True
+    with pytest.raises(UpdateFailed, match="shutting down"):
+        await coordinator._async_update_data()
+    assert cube.disconnects == before
+
+
 async def test_a_low_battery_and_an_error_create_repair_hints_that_clear_again(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
 ) -> None:
@@ -462,7 +586,9 @@ async def test_the_poll_interval_can_be_changed_in_the_options(
     )
     assert result["type"] == "create_entry"
     assert config_entry.options["scan_interval"] == 120
-
+    # The update listener schedules a reload; older Home Assistant cores complain at teardown
+    # if that task is still pending when the test ends.
+    await hass.async_block_till_done()
 
 
 async def _climate_call(hass: HomeAssistant, service: str, entity_id: str, **data: object) -> None:
@@ -932,6 +1058,71 @@ async def test_no_identifier_appears_anywhere_in_the_diagnostics(hass: HomeAssis
     for what, value in identifiers.items():
         assert value not in report, f"{what} leaks into the diagnostics"
     assert "192.168" not in report
+
+
+async def test_a_name_changed_on_the_cube_reaches_the_device_registry(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    registry = dr.async_get(hass)
+    device = device_for_identifier(hass, (DOMAIN, RADIATOR), config_entry.entry_id)
+    assert device is not None
+    cube.device_by_rf(RADIATOR).name = "Renamed in the Cube"
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert registry.async_get(device.id).name == "Renamed in the Cube"
+
+
+async def test_a_name_chosen_in_home_assistant_is_not_overwritten_by_the_cube(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    registry = dr.async_get(hass)
+    device = device_for_identifier(hass, (DOMAIN, RADIATOR), config_entry.entry_id)
+    assert device is not None
+    registry.async_update_device(device.id, name_by_user="My radiator")
+    cube.device_by_rf(RADIATOR).name = "Renamed in the Cube"
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    updated = registry.async_get(device.id)
+    assert updated.name_by_user == "My radiator"
+    assert updated.name == "Bad Thermostat"
+
+
+async def test_an_unchanged_cube_name_does_not_write_to_the_registry(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    with patch.object(dr.async_get(hass), "async_update_device") as update:
+        await config_entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+    update.assert_not_called()
+
+
+async def test_a_device_of_another_entry_is_not_renamed(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """RF addresses are only three bytes; a name sync must stay inside its own entry."""
+    from types import SimpleNamespace
+
+    from custom_components.maxcube_local.coordinator import MaxCubeCoordinator
+
+    coordinator = MaxCubeCoordinator(hass, config_entry, HOST, 62910, 60)
+    try:
+        registry = SimpleNamespace(
+            async_get_device=lambda identifiers: SimpleNamespace(
+                id="other", config_entry_id="another-entry"
+            ),
+            async_get_device_by_identifier=None,
+        )
+        assert (
+            coordinator._device_for_identifier(
+                registry, (DOMAIN, RADIATOR), config_entry.entry_id  # type: ignore[arg-type]
+            )
+            is None
+        )
+    finally:
+        await coordinator.async_shutdown()
 
 
 def _m_storage_key(entry: MockConfigEntry) -> str:

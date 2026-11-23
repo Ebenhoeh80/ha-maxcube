@@ -2,7 +2,7 @@
 
 This page records how the integration works, where its time goes, what can fail and how it
 recovers, what is checked automatically, and which options were rejected and why. Numbers are
-measured, with date and method. Last updated: 2026-11-20 (after release 1.3.2).
+measured, with date and method. Last updated: 2026-11-22 (after release 1.8.1).
 
 ## 1. Architecture and data flow
 
@@ -29,10 +29,21 @@ measured, with date and method. Last updated: 2026-11-20 (after release 1.3.2).
 
 ## 2. Concurrency and lifecycle
 
-- **All Cube calls are serialised** (`coordinator.async_cube_call`, an `asyncio.Lock`; a second lock keeps a programme write and its read-back together and cannot be merged with the first, which the read-back needs). Before 1.4.0 a poll
-  and a command ran in different executor threads on the same connection object and could overlap. A test
-  that records how many threads are inside a Cube call at once failed on the old code
-  (`assert 2 == 1`) and passes now.
+- **Polls, commands, snapshots and disconnect share one dedicated worker thread**
+  (`coordinator._async_io_call`, a `ThreadPoolExecutor(max_workers=1)`). An `asyncio.Lock` would be released
+  when a Home Assistant task is cancelled while its executor thread still talks to the Cube; the next call
+  could then overlap on the single-client port. A second, independent lock keeps a programme write and its
+  read-back together. Before 1.4.0 a poll and a command ran in different executor threads and could overlap;
+  a cancellation test now proves that even a cancelled call still blocks the next one until it has finished.
+  Short connection checks during discovery, the config flow and the UDP reboot use Home Assistant's shared
+  executor; they are brief but are not part of this per-entry serialisation.
+- **The worker queue is intentionally unbounded.** It belongs to one config entry, every call is awaited
+  by its caller and refreshes are debounced by the coordinator. Adding a semaphore around `submit` would
+  reintroduce the cancellation bug: it would be released while the worker still holds the Cube's port.
+- **Snapshots are copied in the same worker**, so the copy cannot overlap Cube I/O. It is not atomic with
+  the poll: identity checks and metadata writes run on the event loop, and another task can queue a command
+  in between. Previously the copy ran unlocked in another executor thread and a command could mutate the
+  library objects during it.
 - **Read-back after a command** is merged for 2 s (Home Assistant's default is 10 s, which left the second
   of two quick changes unseen for that long).
 - The entry holds the Cube address in its data; it is reloaded when options change.
@@ -72,13 +83,13 @@ no-change target writes raised the Cube's duty cycle from 4 % to 21 % (it decays
 
 ## 5. Quality gates (all run in CI)
 
-| Judge | Gate | Result 2026-11-20 |
+| Judge | Gate | Result 2026-11-22 |
 |---|---|---|
 | Ruff (E, W, F, I, B, C4, UP, SIM, RET, PL, C901, ANN) | no findings | pass (tests are exempt from PLR2004, PLC0415 and ANN) |
-| MyPy with the real Home Assistant types | no errors | pass (12 before) |
-| pytest, unit tests (Python 3.12, 3.13) | all pass | 46 passed |
-| pytest in a real Home Assistant core | all pass | 38 passed |
-| Coverage (both suites combined) | at least 95 % | 95.7 % |
+| MyPy with the real Home Assistant types | no errors | pass |
+| pytest, unit tests (Python 3.12, 3.13) | all pass | 168 passed, 2 xfailed |
+| pytest in a real Home Assistant core (2025.3 and 2026.2) | all pass | 128 passed in each |
+| Coverage (both suites combined) | at least 95 % | 96.43 % |
 | hassfest, HACS validation | valid | pass |
 | xenon | absolute B, modules A, average A | pass |
 | CodeQL (security-and-quality) | no new alerts | pass |
@@ -91,9 +102,8 @@ Not run: SonarQube, Semgrep, py-spy, Scalene (not available on the development m
 - **Standing connection:** rejected (see 4).
 - **Rewriting the library as an asynchronous client:** strategic option (Platinum `async-dependency`, removal of
   devices at run time); needs tests at the real Cube.
-- **Link-status diagnostics from a contributor (pull request #3):** the technical review is done and a rebased
-  branch exists, but it is not released until the contributor confirms the origin of the code (the docstrings
-  cite GPL sources while this repository is MIT).
+- **Link-status diagnostics from a contributor (pull request #3):** released in 1.4.0 after the rebased
+  version in #17 and the origin/licence question were resolved; the current diagnostics page documents it.
 
 ## 7. Open items
 

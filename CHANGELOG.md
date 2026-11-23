@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-11-23
+
+### Fixed
+- **A cancelled Home Assistant task can no longer let two Cube calls overlap.** Polls, commands, writes and snapshots now share one dedicated worker thread, so a cancelled task cannot release a lock while its socket call is still running. A regression test proves that the next call waits for the cancelled one to finish.
+- **A discovered address is saved only after the device at that address confirms the expected serial.** Discovery replies are unauthenticated; a candidate without a serial is rejected, and a flow that would redirect an existing entry checks the claimed serial at the new host. A forged reply can no longer move an entry permanently. This is a mix-up guard, not authentication.
+- **A window contact with no status bit in its telegram reports `unknown` instead of a guessed `closed`.**
+- **Impossible times and temperatures in a weekly programme are discarded** instead of appearing as setpoints or as the current target temperature; a damaged programme is refused on write.
+- **Serial numbers were removed from log messages**; identity errors are now `HomeAssistantError` and no longer reported as connection failures.
+- **Shutdown closes the worker without blocking the event loop** and tolerates repeated calls, a failing disconnect and a refresh that races the unload.
+- **A device renamed on the Cube gets the new name in Home Assistant** at the next poll; a name the user chose in Home Assistant is never overwritten.
+
 ## [1.8.1] - 2026-11-22
 
 ### Fixed

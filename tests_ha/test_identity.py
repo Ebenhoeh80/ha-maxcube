@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from homeassistant.config_entries import (
     SOURCE_DHCP,
     SOURCE_INTEGRATION_DISCOVERY,
@@ -228,6 +229,30 @@ async def test_another_cube_at_the_saved_address_is_not_taken_for_ours(hass: Hom
     assert entry.unique_id == CUBE_SERIAL
 
 
+async def test_a_foreign_cube_error_names_neither_serial(hass: HomeAssistant, cube: FakeCube) -> None:
+    """The setup path must report a mismatch without leaking either serial number."""
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    from custom_components.maxcube_local.coordinator import MaxCubeCoordinator
+
+    entry = _modern()
+    entry.add_to_hass(hass)
+    cube.serial = "KEQ9999999"
+    coordinator = MaxCubeCoordinator(hass, entry, HOST, 62910, 60)
+    try:
+        with (
+            patch(COORD_DISCOVER, return_value=[]),
+            pytest.raises(UpdateFailed) as exc,
+        ):
+            await coordinator._async_setup()
+    finally:
+        await coordinator.async_shutdown()  # the test owns this coordinator, so close its worker
+    message = str(exc.value)
+    assert "different MAX! Cube" in message
+    assert CUBE_SERIAL not in message
+    assert "KEQ9999999" not in message
+
+
 async def test_a_cube_that_is_replaced_while_running_is_noticed(hass: HomeAssistant, cube: FakeCube) -> None:
     entry = _modern()
     await _setup(hass, entry)
@@ -235,6 +260,11 @@ async def test_a_cube_that_is_replaced_while_running_is_noticed(hass: HomeAssist
     with patch(COORD_DISCOVER, return_value=[]):
         await entry.runtime_data.async_refresh()
     assert entry.runtime_data.last_update_success is False
+    message = str(entry.runtime_data.last_exception)
+    assert "different MAX! Cube" in message
+    assert "communicating" not in message
+    assert CUBE_SERIAL not in message  # serials are redacted from logs and errors
+    assert "KEQ9999999" not in message
 
 
 async def test_the_address_is_found_when_another_cube_took_the_old_one(hass: HomeAssistant, cube: FakeCube) -> None:
@@ -256,6 +286,20 @@ async def test_the_address_is_found_when_another_cube_took_the_old_one(hass: Hom
         await hass.async_block_till_done()
     assert seen == [HOST, NEW_HOST]
     assert entry.data[CONF_HOST] == NEW_HOST
+
+
+async def test_a_forged_discovery_answer_cannot_redirect_the_entry(hass: HomeAssistant, cube: FakeCube) -> None:
+    """A discovery answer is unauthenticated: its host is saved only after the serial matches."""
+    entry = _modern()
+    entry.add_to_hass(hass)
+    cube.serial = "KEQ9999999"  # a foreign Cube answers everywhere, including the candidate
+    with (
+        patch(COORD_DISCOVER, return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}]),
+        patch(COORD_REACHABLE, return_value=True),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.data[CONF_HOST] == HOST
+    assert entry.state is ConfigEntryState.SETUP_RETRY
 
 
 # ------------------------------------------------------------------ the user flow
@@ -337,11 +381,12 @@ async def test_discovery_updates_the_address_of_a_cube_that_is_set_up(hass: Home
     entry = _modern()
     await _setup(hass, entry)
     first = entry.runtime_data
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": SOURCE_INTEGRATION_DISCOVERY},
-        data={CONF_HOST: NEW_HOST, CONF_CUBE_SERIAL: CUBE_SERIAL},
-    )
+    with patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_INTEGRATION_DISCOVERY},
+            data={CONF_HOST: NEW_HOST, CONF_CUBE_SERIAL: CUBE_SERIAL},
+        )
     await hass.async_block_till_done()
     assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
     assert entry.data[CONF_HOST] == NEW_HOST
@@ -352,14 +397,54 @@ async def test_discovery_updates_the_address_of_a_cube_that_is_set_up(hass: Home
 async def test_discovery_recognises_an_entry_that_is_not_migrated_yet(hass: HomeAssistant, cube: FakeCube) -> None:
     entry = _legacy()
     entry.add_to_hass(hass)
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": SOURCE_INTEGRATION_DISCOVERY},
-        data={CONF_HOST: NEW_HOST, CONF_CUBE_SERIAL: CUBE_SERIAL},
-    )
+    with patch(CONNECT, return_value=CUBE_SERIAL):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_INTEGRATION_DISCOVERY},
+            data={CONF_HOST: NEW_HOST, CONF_CUBE_SERIAL: CUBE_SERIAL},
+        )
     assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
     assert entry.data[CONF_HOST] == NEW_HOST
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+@pytest.mark.parametrize("answered", ["KEQ9999999", ""])
+async def test_a_forged_discovery_flow_does_not_redirect_a_known_entry(
+    hass: HomeAssistant, cube: FakeCube, answered: str
+) -> None:
+    """A broadcast reply alone must not move a configured entry to another host."""
+    entry = _modern()
+    await _setup(hass, entry)
+    with patch(CONNECT, return_value=answered):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_INTEGRATION_DISCOVERY},
+            data={CONF_HOST: NEW_HOST, CONF_CUBE_SERIAL: CUBE_SERIAL},
+        )
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "wrong_cube"
+    assert entry.data[CONF_HOST] == HOST
+
+
+async def test_a_candidate_without_a_serial_does_not_replace_the_address(
+    hass: HomeAssistant, cube: FakeCube
+) -> None:
+    """A discovery candidate that reports no serial cannot be confirmed."""
+    entry = _modern()
+    entry.add_to_hass(hass)
+
+    def build(host: str, port: int, *args: object, **kwargs: object) -> FakeCube:
+        if host == HOST:
+            raise OSError("saved address does not answer")
+        cube.serial = ""
+        return cube
+
+    with (
+        patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", build),
+        patch(COORD_DISCOVER, return_value=[{"host": NEW_HOST, "serial": CUBE_SERIAL}]),
+        patch(COORD_REACHABLE, return_value=True),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.data[CONF_HOST] == HOST
 
 
 async def test_the_scan_after_startup_starts_a_flow_for_a_reachable_cube(hass: HomeAssistant) -> None:

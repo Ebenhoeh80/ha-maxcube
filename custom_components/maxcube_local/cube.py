@@ -255,12 +255,16 @@ def _apply_wall_thermostat_values(cube: MaxCubeWithStatus, device: MaxDevice, en
 
 
 def _apply_window_value(device: MaxDevice, entry: bytes) -> None:
-    """Set ``is_open`` of a window contact from bits2 (+6, bits 1-0).
+    """Set ``is_open`` of a window contact from bits2 (+6, bits 1-0), if the entry carries it.
 
-    Only an entry with length byte 6 or more carries bits2. A shorter one leaves ``is_open`` as it is.
+    A 6-byte contact entry has no bits2. Its open state is not in the frame, so it must be
+    reported as unknown instead of falling back to the library's ``False`` default and claiming
+    that every window is closed.
     """
     if len(entry) > _L_BITS2:
         device.is_open = (entry[_L_BITS2] & 0x03) > 0
+    else:
+        device.is_open = None
 
 
 def _thermostat_actual_temperature(entry: bytes, mode: int | None) -> float | None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 
+import pytest
 from maxcube.cube import get_programme
 from maxcube.device import MAX_THERMOSTAT
 from maxcube.thermostat import MaxThermostat
@@ -59,6 +60,67 @@ def test_whole_degrees_agree_with_the_library() -> None:
 def test_unused_setpoints_after_the_end_of_the_day_are_ignored() -> None:
     data = _week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL))
     assert len(schedule.parse_week_program(data)["tuesday"]) == len(TYPICAL)
+
+
+def test_an_impossible_slot_is_not_turned_into_a_target_temperature() -> None:
+    # 0xFFFF decodes to 42:35 and 63.5 °C, both impossible. Put it before a valid day and make
+    # sure it is skipped instead of becoming an attribute or a target temperature.
+    broken_day = (b"\xff\xff" + _encode_day(TYPICAL)[:10]).ljust(schedule.BLOCK_BYTES, b"\x00")
+    week = bytearray(_week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL)))
+    monday = 2 * schedule.BLOCK_BYTES  # Saturday, Sunday, Monday
+    week[monday : monday + schedule.BLOCK_BYTES] = broken_day
+    decoded = schedule.parse_week_program(bytes(week))
+    assert decoded["monday"] == [
+        {"until": until, "temp": temp} for temp, until in TYPICAL
+    ]
+    # The damaged word must not leak into the "temperature scheduled now" attribute either.
+    assert schedule.scheduled_temperature(decoded, datetime(2026, 11, 16, 7)) == 21.0
+
+
+def test_an_impossible_temperature_alone_is_skipped() -> None:
+    # A valid time (05:00) with 63.5 °C: only the temperature check rejects this word. The next
+    # word is a valid 24:00, so the day must still end cleanly.
+    impossible = ((127 << 9) | (300 // 5)).to_bytes(2, "big")
+    broken_day = (impossible + _encode_day([(17.0, "24:00")])[:24]).ljust(
+        schedule.BLOCK_BYTES, b"\x00"
+    )
+    week = bytearray(_week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL)))
+    monday = 2 * schedule.BLOCK_BYTES
+    week[monday : monday + schedule.BLOCK_BYTES] = broken_day
+    decoded = schedule.parse_week_program(bytes(week))
+    assert decoded["monday"] == [{"until": "24:00", "temp": 17.0}]
+
+
+@pytest.mark.parametrize(
+    "word",
+    [
+        (0 << 9) | (300 // 5),  # 05:00, 0 °C: below "off"
+        (18 << 9) | (1500 // 5),  # 25:00, 18 °C: past the end of the day
+    ],
+)
+def test_an_invalid_time_or_temperature_word_is_skipped(word: int) -> None:
+    broken_day = (word.to_bytes(2, "big") + _encode_day([(17.0, "24:00")])[:24]).ljust(
+        schedule.BLOCK_BYTES, b"\x00"
+    )
+    week = bytearray(_week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL)))
+    week[2 * schedule.BLOCK_BYTES : 3 * schedule.BLOCK_BYTES] = broken_day
+    assert schedule.parse_week_program(bytes(week))["monday"] == [
+        {"until": "24:00", "temp": 17.0}
+    ]
+
+
+def test_a_damaged_last_slot_makes_the_programme_unwritable() -> None:
+    # 24:00 with an impossible temperature. The slot is skipped, so the day has no end at midnight
+    # and copying it must be refused instead of writing a shortened programme.
+    impossible = ((127 << 9) | (1440 // 5)).to_bytes(2, "big")
+    broken_day = (_encode_day(TYPICAL)[:8] + impossible).ljust(schedule.BLOCK_BYTES, b"\x00")
+    week = bytearray(_week(dict.fromkeys(schedule.WEEK_DAYS, TYPICAL)))
+    monday = 2 * schedule.BLOCK_BYTES
+    week[monday : monday + schedule.BLOCK_BYTES] = broken_day
+    decoded = schedule.parse_week_program(bytes(week))
+    assert decoded["monday"][-1] == {"until": "22:00", "temp": 21.5}
+    with pytest.raises(schedule.ScheduleError, match="must_end_at_midnight"):
+        schedule.source_programme(decoded, ["monday"])
 
 
 def test_short_data_leaves_out_the_missing_days() -> None:

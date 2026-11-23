@@ -101,8 +101,7 @@ class MaxCubeRebootButton(ButtonEntity):
         """Send the reboot datagram to the Cube."""
         if len(self._serial) != _SERIAL_LENGTH:
             _LOGGER.error(
-                "Cannot reboot MAX! Cube: serial %r has %d characters, expected %d",
-                self._serial,
+                "Cannot reboot MAX! Cube: its identity has an unexpected length (%d, expected %d)",
                 len(self._serial),
                 _SERIAL_LENGTH,
             )
@@ -112,7 +111,7 @@ class MaxCubeRebootButton(ButtonEntity):
 
         # Blocking socket work belongs in the executor, not the event loop.
         await self.hass.async_add_executor_job(self._send_reboot, payload)
-        _LOGGER.info("Sent reboot request to MAX! Cube %s", self._serial)
+        _LOGGER.info("Sent reboot request to MAX! Cube")
 
     @staticmethod
     def _send_reboot(payload: bytes) -> None:

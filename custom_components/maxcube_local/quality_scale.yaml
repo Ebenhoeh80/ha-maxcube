@@ -37,7 +37,7 @@ rules:
   # --- Silver ---
   action-exceptions:
     status: done
-    comment: A network error or a refused command in a user action becomes a translated HomeAssistantError (cube_unreachable, command_rejected); tested.
+    comment: A network error, a refused command or an identity mismatch in a user action becomes a translated HomeAssistantError (cube_unreachable, command_rejected, wrong_cube); tested.
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters: done
@@ -50,14 +50,14 @@ rules:
     comment: The Cube has no authentication.
   test-coverage:
     status: done
-    comment: The unit tests and the tests in a real Home Assistant core together cover 96 %; CI fails below 95 %.
+    comment: The unit tests and the tests in a real Home Assistant core together cover 96.4 %; CI fails below 95 %.
 
   # --- Gold ---
   devices: done
   diagnostics: done
   discovery:
-    status: exempt
-    comment: The Cube offers no Home Assistant discovery protocol; its UDP broadcast is used inside the config flow to pre-fill the address.
+    status: done
+    comment: The manifest matches the Cube's MAC prefix for DHCP discovery, and the UDP broadcast creates an integration-discovery flow; both lead to a config entry.
   discovery-update-info:
     status: done
     comment: After a failed poll the Cube is looked up by its serial number and the new address is saved.
