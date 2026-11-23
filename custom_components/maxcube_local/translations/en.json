@@ -229,6 +229,12 @@
     },
     "command_rejected": {
       "message": "The Cube did not accept the command. Its radio time may be used up; try again later."
+    },
+    "wrong_cube": {
+      "message": "A different MAX! Cube answers at the saved address; this entry belongs to another device."
+    },
+    "cube_shutting_down": {
+      "message": "The MAX! Cube connection is shutting down. Try again in a moment."
     }
   },
   "issues": {

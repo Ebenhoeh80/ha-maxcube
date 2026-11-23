@@ -138,7 +138,7 @@ def test_a_value_the_device_does_not_carry_is_none() -> None:
     assert window.valve_position is None
     assert window.comfort_temperature is None
     assert window.schedule == ()
-    assert window.is_open is False
+    assert window.is_open is None  # a 6-byte contact telegram has no open/closed bit
 
 
 def test_a_device_that_is_not_in_the_snapshot_is_unknown_and_stale() -> None:

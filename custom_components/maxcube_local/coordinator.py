@@ -12,6 +12,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Any, TypeVar
 
@@ -19,6 +20,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
@@ -54,8 +56,19 @@ type MaxCubeConfigEntry = ConfigEntry[MaxCubeCoordinator]
 MIN_STALE_AFTER = 90
 
 
-class WrongCubeError(OSError):
-    """A different Cube than the one of this entry answers at the saved address."""
+class WrongCubeError(HomeAssistantError):
+    """A different Cube than the one of this entry answers at the saved address.
+
+    This is an identity mismatch, not a network failure. Keeping it separate from ``OSError``
+    prevents a wrong Cube from being reported as "cannot reach" and lets rediscovery by serial
+    number stay the explicit recovery path.
+    """
+
+    def __init__(self, message: str) -> None:
+        """Carry a translation key so a service error is localised if it escapes a poll."""
+        super().__init__(
+            message, translation_domain=DOMAIN, translation_key="wrong_cube"
+        )
 
 
 def m_message_storage_key(entry_id: str) -> str:
@@ -94,13 +107,16 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         self._host = host
         self._port = port
         self._last_rediscovery = float("-inf")
-        # Two locks with two jobs; they cannot be merged. ``_io_lock`` makes every single call to
-        # the Cube (which accepts one connection at a time) wait for the one before. ``_write_lock``
-        # keeps a whole programme write (send, then read back) together so that two writes do not
-        # interleave; it is held while the read-back takes ``_io_lock``, so one lock for both would
-        # block itself.
+        # One dedicated worker serialises every Cube call (poll, command, snapshot, disconnect).
+        # An asyncio.Lock would be released when a Home Assistant task is cancelled while its
+        # executor thread still talks to the Cube; the next call could then overlap on the
+        # single-client port. A one-thread executor keeps the serialization in the worker, where
+        # the blocking call actually happens.
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="maxcube_io")
+        # Keeps a whole programme write (send, then read back) together so two writes cannot
+        # interleave. It is independent of the worker: the read-back is submitted to that worker
+        # while this lock is held, so an asyncio lock for both would deadlock here.
         self._write_lock = asyncio.Lock()
-        self._io_lock = asyncio.Lock()
         # Pending "was the programme taken?" checks, one timer per device (see async_write_schedule).
         self._verify_timers: dict[str, Callable[[], None]] = {}
         self._verify_days: dict[str, dict[str, list[dict]]] = {}
@@ -110,6 +126,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         # Set before anything is awaited in async_shutdown: an already running verification
         # callback must not start a new write while the entry is going away.
         self._shutting_down = False
+        self._shutdown_started = False
+        self._worker_closed = False
         entry.async_on_unload(self._cancel_verifications)
         # What the last polls cost (shown in the diagnostics).
         self.last_poll_ms: int | None = None
@@ -136,10 +154,16 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             raise RuntimeError("The MAX! Cube is not connected yet")
         return self._cube
 
-    def _connect(self) -> LinkStatusMaxCube:
-        """Build the MaxCube; the constructor performs the initial read (blocking)."""
+    def _connect(self, host: str | None = None) -> LinkStatusMaxCube:
+        """Build the MaxCube; the constructor performs the initial read (blocking).
+
+        ``host`` lets a candidate address from discovery be checked before it is saved. A
+        Cube answering under a different serial is rejected here, so an unauthenticated discovery
+        answer cannot redirect this entry to a device that is not ours. A Cube that reports no
+        serial at all cannot be distinguished this way (see ``_check_identity``).
+        """
         cube = LinkStatusMaxCube(
-            self._host, self._port, now=dt_util.now, last_m_message=self._saved_m_message
+            host or self._host, self._port, now=dt_util.now, last_m_message=self._saved_m_message
         )
         try:
             self._check_identity(cube)
@@ -151,12 +175,28 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         cube.disconnect()
         return cube
 
-    def _check_identity(self, cube: LinkStatusMaxCube) -> None:
-        """Make sure the Cube that answers is the one this entry belongs to (compared by serial number)."""
+    def _check_identity(
+        self, cube: LinkStatusMaxCube, *, require_serial: bool = False
+    ) -> None:
+        """Make sure the Cube that answers is the one this entry belongs to (compared by serial number).
+
+        Normal polls stay permissive when a Cube reports no serial at all: older setups and
+        migrations must keep working. A discovery candidate is checked strictly (``require_serial``),
+        because its address is only adopted after the identity has been confirmed.
+        """
         expected = self.config_entry.data.get(CONF_CUBE_SERIAL)
-        if expected and cube.serial and cube.serial != expected:
+        if not expected:
+            return
+        if require_serial:
+            mismatch = cube.serial != expected
+        else:
+            mismatch = bool(cube.serial) and cube.serial != expected
+        if mismatch:
+            # Do not put serial numbers in logs or user-facing errors: they are unauthenticated
+            # identifiers and are redacted from diagnostics for the same reason.
             raise WrongCubeError(
-                f"Another MAX! Cube ({cube.serial}) answers at {self._host}; this entry belongs to {expected}"
+                "A different MAX! Cube answers at the saved address; "
+                "this entry belongs to another device"
             )
 
     async def _async_setup(self) -> None:
@@ -169,32 +209,113 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         if isinstance(stored, dict) and isinstance(stored.get("m_message"), str):
             self._saved_m_message = stored["m_message"]
         try:
-            self._cube = await self.hass.async_add_executor_job(self._connect)
+            self._cube = await self._async_io_call(self._connect)
+        except WrongCubeError as err:
+            self._last_rediscovery = time.monotonic()
+            new_host = await self._async_find_new_host()
+            if new_host is None:
+                raise UpdateFailed(str(err)) from err
+            self._cube = await self._async_connect_at(new_host)
+            self._adopt_host(new_host)
         except (OSError, TimeoutError) as err:
             self._last_rediscovery = time.monotonic()
             new_host = await self._async_find_new_host()
             if new_host is None:
                 raise UpdateFailed(f"Cannot reach the MAX! Cube at {self._host}: {err}") from err
+            self._cube = await self._async_connect_at(new_host)
             self._adopt_host(new_host)
-            self._cube = await self.hass.async_add_executor_job(self._connect)
+
+    async def _async_connect_at(self, host: str) -> LinkStatusMaxCube:
+        """Connect to a discovery candidate and verify it before its address is saved.
+
+        Discovery answers are unauthenticated. Persisting a candidate before its serial has been
+        checked would let a forged reply redirect this entry permanently. A failed check leaves
+        the saved address untouched.
+        """
+        try:
+            cube = await self._async_io_call(self._connect, host)
+            # A candidate with no serial cannot be confirmed; do not save its address.
+            self._check_identity(cube, require_serial=True)
+            return cube
+        except WrongCubeError as err:
+            raise UpdateFailed(str(err)) from err
+        except HomeAssistantError as err:
+            raise UpdateFailed(str(err)) from err
+        except (OSError, TimeoutError) as err:
+            raise UpdateFailed(
+                f"Cannot reach the MAX! Cube at the discovered address: {err}"
+            ) from err
 
     async def _async_update_data(self) -> CubeSnapshot:
         """Refresh all device states from the Cube and return the snapshot of this poll."""
-        if self._cube is None:
-            self._cube = await self.hass.async_add_executor_job(self._connect)
-            self._remember_m_message(self._cube)
-            return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
+        if self._shutting_down:
+            # A refresh racing the unload is expected; UpdateFailed keeps it out of the error log.
+            raise UpdateFailed("The MAX! Cube connection is shutting down")
         try:
-            await self._async_poll(self._cube)
-            self._check_identity(self._cube)
-            self._remember_m_message(self._cube)
-            return await self.hass.async_add_executor_job(self._take_snapshot, self._cube)
+            if self._cube is None:
+                self._cube = await self._async_io_call(self._connect)
+            else:
+                await self._async_poll(self._cube)
+                self._check_identity(self._cube)
+            # Shutdown can start while either await above is in flight.
+            self._raise_if_shutting_down()
+            snapshot = await self._async_snapshot(self._cube)
+            self._raise_if_shutting_down()
+            self._sync_device_names(snapshot)
+            return snapshot
+        except WrongCubeError as err:
+            if await self._async_rediscover():
+                raise UpdateFailed(
+                    "A different MAX! Cube answered at the saved address; "
+                    "reloading with the configured Cube"
+                ) from err
+            raise UpdateFailed(str(err)) from err
+        except HomeAssistantError as err:
+            # Includes the shutdown guard after an await; an unload is not an error to log.
+            raise UpdateFailed(str(err)) from err
         except (OSError, TimeoutError) as err:
             if await self._async_rediscover():
                 raise UpdateFailed(
                     "The MAX! Cube has a new IP address; reloading with the new address"
                 ) from err
             raise UpdateFailed(f"Error communicating with MAX! Cube: {err}") from err
+
+    @staticmethod
+    def _device_for_identifier(
+        registry: dr.DeviceRegistry, identifier: tuple[str, str], entry_id: str
+    ) -> dr.DeviceEntry | None:
+        """Find a device by identifier, scoped to this config entry across HA versions."""
+        find = getattr(registry, "async_get_device_by_identifier", None)
+        if find is not None:
+            return find(identifier, entry_id)
+        device = registry.async_get_device(identifiers={identifier})
+        if device is None:
+            return None
+        # RF addresses are only three bytes; two Cubes can use the same one.
+        single = getattr(device, "config_entry_id", None)
+        if single is not None:
+            return device if single == entry_id else None
+        return device if entry_id in getattr(device, "config_entries", ()) else None
+
+    @callback
+    def _sync_device_names(self, snapshot: CubeSnapshot) -> None:
+        """Follow a name changed on the Cube without overwriting a name chosen in Home Assistant.
+
+        ``DeviceInfo`` is applied when an entity is added, so a rename in the Cube's ``M`` message
+        would otherwise stay invisible until the next reload. This is a deliberate registry write
+        in the refresh path: entities are not recreated on a poll. Only devices of this entry with
+        no custom name are touched, and only when the name actually changed.
+        """
+        registry = dr.async_get(self.hass)
+        for address, state in snapshot.devices.items():
+            if not state.name:
+                continue
+            device = self._device_for_identifier(
+                registry, (DOMAIN, address), self.config_entry.entry_id
+            )
+            if device is None or device.name_by_user is not None or device.name == state.name:
+                continue
+            registry.async_update_device(device.id, name=state.name)
 
     def _remember_m_message(self, cube: LinkStatusMaxCube) -> None:
         """Count the polls without a readable M message and save a new one when it changes.
@@ -216,10 +337,40 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             "saved": dt_util.utcnow().isoformat(),
         }
 
-    async def _async_locked_call(self, func: Callable[..., T], *args: object) -> T:
-        """Run a blocking Cube call in the executor, one call at a time (errors pass through)."""
-        async with self._io_lock:
-            return await self.hass.async_add_executor_job(func, *args)
+    async def _async_io_call(
+        self, func: Callable[..., T], *args: object, allow_shutdown: bool = False
+    ) -> T:
+        """Run a blocking Cube call in the dedicated worker (errors pass through).
+
+        The worker has one thread, so calls are serialised even if the awaiting Home Assistant
+        task is cancelled: the thread finishes the call before the next one starts. Once shutdown
+        has begun no further work may be queued - only the explicit disconnect uses
+        ``allow_shutdown`` - otherwise a call could be submitted to a closed executor or slip past
+        the disconnect into a new coordinator after a reload.
+        """
+        if self._shutting_down and not allow_shutdown:
+            self._raise_if_shutting_down()
+        return await self.hass.loop.run_in_executor(self._executor, func, *args)
+
+    def _raise_if_shutting_down(self) -> None:
+        """Reject work that reaches a new await after shutdown has started."""
+        if self._shutting_down:
+            raise HomeAssistantError(
+                "The MAX! Cube connection is shutting down",
+                translation_domain=DOMAIN,
+                translation_key="cube_shutting_down",
+            )
+
+    async def _async_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
+        """Copy the library state in the same worker as the poll, then remember metadata.
+
+        The copy cannot overlap a Cube call. It is not atomic with the poll: identity checks and
+        metadata writes run on the event loop, and another task can queue a command in between.
+        The copy is serialised with all worker I/O, but is not guaranteed to be the exact state
+        immediately after the poll.
+        """
+        self._remember_m_message(cube)
+        return await self._async_io_call(self._take_snapshot, cube)
 
     async def async_cube_call(self, func: Callable[..., T], *args: object) -> T:
         """Run a blocking Cube call for a user action, one call at a time.
@@ -227,10 +378,10 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         Polls, commands and programme writes would otherwise run in different threads on the same
         connection object and could overlap; the Cube then refuses one of them. A network error
         becomes a translated ``HomeAssistantError`` so that the user sees why an action failed
-        (the poll uses ``_async_locked_call`` and handles the raw error itself).
+        (the poll uses ``_async_io_call`` and handles the raw error itself).
         """
         try:
-            return await self._async_locked_call(func, *args)
+            return await self._async_io_call(func, *args)
         except (OSError, TimeoutError) as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -251,11 +402,11 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         self.polls += 1
         try:
             try:
-                await self._async_locked_call(cube.update)
+                await self._async_io_call(cube.update)
             except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as err:
                 _LOGGER.debug("The Cube dropped the connection (%s); trying once more", err)
                 await asyncio.sleep(POLL_RETRY_DELAY)
-                await self._async_locked_call(cube.update)
+                await self._async_io_call(cube.update)
         except (OSError, TimeoutError):
             self.failed_polls += 1
             raise
@@ -267,6 +418,8 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
 
         Returns True if a new address was found and saved; the entry then reloads by itself.
         """
+        if self._shutting_down:
+            return False
         now = time.monotonic()
         if now - self._last_rediscovery < REDISCOVER_COOLDOWN:
             return False
@@ -274,6 +427,10 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         new_host = await self._async_find_new_host()
         if new_host is None:
             return False
+        try:
+            await self._async_connect_at(new_host)
+        except UpdateFailed:
+            return False  # keep the reported error and the saved address
         self._adopt_host(new_host)
         return True
 
@@ -288,7 +445,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
                 continue
             if await self.hass.async_add_executor_job(is_reachable, host, self._port):
                 return host
-            _LOGGER.debug("MAX! Cube %s answers from %s, which cannot be reached; ignored", serial, host)
+            _LOGGER.debug("MAX! Cube answers from %s, which cannot be reached; ignored", host)
         return None
 
     def _adopt_host(self, new_host: str) -> None:
@@ -297,12 +454,7 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         Only the address changes: the identity of the entry (serial number) and its title stay.
         The update listener of the entry reloads it with the new address.
         """
-        _LOGGER.warning(
-            "MAX! Cube %s moved from %s to %s",
-            self.config_entry.data.get(CONF_CUBE_SERIAL),
-            self._host,
-            new_host,
-        )
+        _LOGGER.warning("MAX! Cube moved from %s to %s", self._host, new_host)
         self._host = new_host
         self.hass.config_entries.async_update_entry(
             self.config_entry, data={**self.config_entry.data, CONF_HOST: new_host}
@@ -462,20 +614,36 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         self._verify_allow_retry.clear()
 
     async def async_shutdown(self) -> None:
-        """Stop the coordinator and release the Cube's single client slot.
+        """Stop the coordinator, release the Cube's port and close the Cube worker.
 
         The library already disconnects after every poll and command when
         ``use_persistent_connection`` is false, so this explicit call is normally a no-op. It is a
-        defensive release for the case that a connection object still holds a socket. It waits for
-        an in-flight call via ``_io_lock``; it cannot free the port before that call finishes.
-        ``disconnect`` sends ``q:``, closes the socket and never raises on network errors.
+        defensive release for the case that a connection object still holds a socket. Setting
+        ``_shutting_down`` first stops any new call from entering the worker; the disconnect is
+        queued behind the calls that were already submitted. Awaiting it therefore drains the
+        worker before the executor is closed. A network error is logged so shutdown itself does not
+        fail. Repeated calls are harmless.
         """
+        # Set before the first await: two parallel unloads/stops must not both disconnect.
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
         self._shutting_down = True
         # Also needed when Home Assistant stops without unloading the entry first.
         self._cancel_verifications()
         await super().async_shutdown()
-        if self._cube is not None:
-            await self.async_cube_call(self._cube.disconnect)
+        try:
+            if self._cube is not None:
+                try:
+                    await self._async_io_call(self._cube.disconnect, allow_shutdown=True)
+                except (OSError, TimeoutError, HomeAssistantError, RuntimeError) as err:
+                    _LOGGER.debug("Could not release the Cube connection during shutdown: %s", err)
+        finally:
+            # Normally the awaited disconnect drained the queue and the thread exits on its own.
+            # wait=False also covers a cancelled shutdown: it never blocks the event loop inside a
+            # library socket timeout, and cancel_futures drops work queued after that.
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._worker_closed = True
 
     async def _async_verify_schedule(
         self, device: MaxDevice, days: dict[str, list[dict]], *, allow_retry: bool = True
@@ -545,10 +713,11 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         await self.async_request_refresh()
 
     def _take_snapshot(self, cube: LinkStatusMaxCube) -> CubeSnapshot:
-        """Copy the Cube into a snapshot; runs in the executor, right after the poll.
+        """Copy the Cube into a snapshot; runs in the dedicated Cube worker.
 
-        The copy is made before the next poll can change the library objects. The low-battery
-        flags go through ``BatteryHold`` here, so the held value is part of the snapshot.
+        Polls, commands and snapshots share that one thread, so the library objects cannot be
+        mutated during the copy. The low-battery flags go through ``BatteryHold`` here, so the held
+        value is part of the snapshot.
         """
         now = dt_util.utcnow().timestamp()
         return take_snapshot(

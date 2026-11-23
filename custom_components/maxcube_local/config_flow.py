@@ -185,9 +185,20 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
         self, discovery_info: dict[str, Any]
     ) -> ConfigFlowResult:
         """Handle a Cube found by the integration's own broadcast scan."""
-        return await self._async_handle_discovery(
-            discovery_info[CONF_CUBE_SERIAL], discovery_info[CONF_HOST]
-        )
+        serial = discovery_info[CONF_CUBE_SERIAL]
+        host = discovery_info[CONF_HOST]
+        # The broadcast reply is unauthenticated. Only a known entry can be redirected here, so
+        # check exactly that case: the device at the new address must report the claimed serial.
+        if self._entry_with_serial(serial) is not None:
+            try:
+                answering = await self.hass.async_add_executor_job(
+                    _try_connect, host, DEFAULT_PORT
+                )
+            except Exception:  # noqa: BLE001 - discovery is best effort
+                return self.async_abort(reason="cannot_connect")
+            if not answering or answering != serial:
+                return self.async_abort(reason="wrong_cube")
+        return await self._async_handle_discovery(serial, host)
 
     async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
         """Handle a device whose hardware address belongs to eQ-3 (a Cube, or another eQ-3 device).

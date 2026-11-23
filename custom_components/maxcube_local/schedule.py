@@ -60,7 +60,12 @@ def parse_week_program(data: bytes) -> Schedule:
         for position in range(0, BLOCK_BYTES, 2):
             word = (block[position] << 8) | block[position + 1]
             minutes = (word & 0x1FF) * 5
-            slots.append({"until": format_time(minutes), "temp": (word >> 9) / 2})
+            temp = (word >> 9) / 2
+            # Padding is 0x0000 (0 °C, outside the range) and a damaged word can decode to an
+            # impossible time such as 42:35. Neither may become a setpoint or a target temperature.
+            if minutes > END_OF_DAY_MINUTES or not MIN_TEMPERATURE <= temp <= MAX_TEMPERATURE:
+                continue
+            slots.append({"until": format_time(minutes), "temp": temp})
             if minutes >= END_OF_DAY_MINUTES:
                 break
         by_day[name] = slots

@@ -24,6 +24,8 @@ from maxcube.device import (
     MAX_WINDOW_SHUTTER,
     MaxDevice,
 )
+from maxcube.windowshutter import MaxWindowShutter
+from maxcube_local import cube as cube_module
 from maxcube_local import schedule
 from maxcube_local.linkstatus import LinkStatusMaxCube
 
@@ -218,10 +220,11 @@ def test_a_window_contact_as_last_entry_keeps_the_other_devices() -> None:
     status = linked.device_status("0A1B01", STALE_AFTER)
     assert (status.initialized, status.error, status.link_error) == (False, True, False)
 
-    # A 6-byte contact has no status byte inside its entry, so it is not read from the next entry.
+    # A 6-byte contact has no status byte inside its entry. Its open state is unknown, not a
+    # guessed "closed" taken from the library's default.
     window = device_at(linked, "0A1B02")
     assert window.is_windowshutter()
-    assert window.is_open is False
+    assert window.is_open is None
     window_status = linked.device_status("0A1B02", STALE_AFTER)
     assert window_status.last_heard is not None
     assert (window_status.initialized, window_status.link_error, window_status.raw_flags) == (
@@ -229,6 +232,42 @@ def test_a_window_contact_as_last_entry_keeps_the_other_devices() -> None:
         None,
         None,
     )
+
+
+@pytest.mark.parametrize(
+    ("bits2", "expected"),
+    [(0x00, False), (0x01, True), (0x02, True), (0x80, False), (0x81, True)],
+)
+def test_a_full_window_entry_reports_the_open_bit(bits2: int, expected: bool) -> None:
+    window = MaxWindowShutter()
+    window.type = MAX_WINDOW_SHUTTER
+    # The length byte counts the following bytes: 11 means a 12-byte entry. bits2 sits at
+    # offset 6, i.e. payload index 5, and either of its two low bits means "open".
+    payload = bytearray(11)
+    payload[0:3] = bytes.fromhex("0A1B02")
+    payload[5] = bits2
+    entry = bytes([11]) + bytes(payload)
+    assert cube_module.split_l_entries(entry) == [entry]
+    cube_module._apply_window_value(window, entry)
+    assert window.is_open is expected
+
+
+def test_a_window_reports_unknown_after_a_short_entry_replaces_an_open_one() -> None:
+    """A later 6-byte telegram must clear a previously reported open state."""
+    window = MaxWindowShutter()
+    window.type = MAX_WINDOW_SHUTTER
+    window.rf_address = "0A1B02"
+    linked = object.__new__(cube_module.MaxCubeWithStatus)
+    linked.devices = [window]
+    full = bytearray(11)
+    full[0:3] = bytes.fromhex("0A1B02")
+    full[5] = 0x81  # bits2 at entry offset 6: open, battery low
+    short = b"\x05" + bytes.fromhex("0A1B02") + b"\x00\x00"
+
+    linked.parse_l_message(base64.b64encode(bytes([11]) + bytes(full)).decode())
+    assert window.is_open is True
+    linked.parse_l_message(base64.b64encode(short).decode())
+    assert window.is_open is None
 
 
 def test_thermostat_reads_actual_temperature_in_auto_and_manual(cube: FakeCube) -> None:

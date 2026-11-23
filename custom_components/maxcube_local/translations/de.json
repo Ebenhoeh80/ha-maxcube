@@ -229,6 +229,12 @@
     },
     "command_rejected": {
       "message": "Der Cube hat den Befehl nicht angenommen. Möglicherweise ist seine Funkzeit aufgebraucht; versuchen Sie es später noch einmal."
+    },
+    "wrong_cube": {
+      "message": "An der gespeicherten Adresse antwortet ein anderer MAX! Cube; dieser Eintrag gehört zu einem anderen Gerät."
+    },
+    "cube_shutting_down": {
+      "message": "Die Verbindung zum MAX! Cube wird beendet. Bitte versuchen Sie es in einem Moment erneut."
     }
   },
   "issues": {

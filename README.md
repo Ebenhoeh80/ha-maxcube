@@ -34,7 +34,8 @@ integration that ships with Home Assistant Core.
   the programme sets right now. The service `maxcube_local.get_schedule` returns it as a response.
 - **Sensors**: measured temperature per thermostat and valve opening (%) per
   radiator thermostat.
-- **Binary sensors**: window/door contacts and per-device low-battery warnings.
+- **Binary sensors**: window/door contacts (open/closed where the Cube reports it, otherwise `unknown`)
+  and per-device low-battery warnings.
 - **Cube diagnostics**: the radio **duty cycle** (%) and the number of **free memory slots**,
   read at every poll. The Cube may only use a limited share of the radio time; at 100 % it
   sends no radio commands for about an hour, so watch the duty cycle when you change many settings.
@@ -217,12 +218,13 @@ names and history stay.
 | MAX! Cube LAN gateway | yes (hub device, firmware, radio duty cycle, free memory slots) |
 | Radiator thermostat / thermostat+ | yes (climate, temperature, valve position, battery, weekly programme read and write) |
 | Wall thermostat | yes (climate, temperature, battery; the programme is shown, not written) |
-| Window / door contact | yes (open/closed, battery) |
+| Window / door contact | yes (open/closed where reported, battery) |
 | Eco button | not yet |
 
 ## 🔧 Supported functions
 
-Read: target and measured temperature, mode, presets, valve position, window state, battery, weekly programme,
+Read: target and measured temperature, mode, presets, valve position, window state (`unknown` when the Cube
+sends no status bit), battery, weekly programme,
 radio duty cycle, free memory slots. Write: target temperature, HVAC mode, preset, weekly programme (radiator
 thermostats). Not supported: pairing devices, changing comfort/eco/window temperatures, holiday mode.
 

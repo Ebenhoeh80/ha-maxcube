@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from typing import Any, cast
 
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
@@ -20,7 +21,7 @@ from .snapshot import DeviceState
 # and deprecates ``via_device`` (removed in 2027.8). Older versions only know
 # ``via_device``, so the right one is chosen at import time.
 _VIA_DEVICE_ID = hasattr(dr.DeviceRegistry, "async_get_device_by_identifier") and (
-    "via_device_id" in getattr(DeviceInfo, "__dataclass_fields__", {})
+    "via_device_id" in getattr(DeviceInfo, "__annotations__", {})
 )
 
 
@@ -30,15 +31,23 @@ def _apply_hub_link(
     """Group a device under the Cube hub (the way this Home Assistant version wants it)."""
     if not cube_serial:
         return
+    # DeviceInfo is a version-dependent TypedDict (or a dataclass in newer versions), so the
+    # value is treated as a loose mapping for the two spellings.
+    values = cast(Any, info)
     if not _VIA_DEVICE_ID:
         # Older Home Assistant versions only know ``via_device``; newer ones removed the key.
-        info["via_device"] = (DOMAIN, cube_serial)  # type: ignore[typeddict-unknown-key]
+        values["via_device"] = (DOMAIN, cube_serial)
         return
-    hub = dr.async_get(coordinator.hass).async_get_device_by_identifier(
-        (DOMAIN, cube_serial), coordinator.config_entry.entry_id
-    )
+    find = getattr(dr.async_get(coordinator.hass), "async_get_device_by_identifier", None)
+    if find is None:
+        values["via_device"] = (DOMAIN, cube_serial)
+        return
+    hub = find((DOMAIN, cube_serial), coordinator.config_entry.entry_id)
     if hub is not None:
-        info["via_device_id"] = hub.id
+        if isinstance(values, dict):
+            values["via_device_id"] = hub.id
+        else:
+            values.via_device_id = hub.id
 
 
 @callback

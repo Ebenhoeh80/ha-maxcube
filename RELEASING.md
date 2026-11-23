@@ -13,12 +13,17 @@ feature the minor version, a fix the patch version.
 
 ## 2. Check locally
 
-The repository has no automated Home Assistant tests; CI runs Hassfest and the HACS validation only. Check the change on a Home Assistant instance with a Cube.
+CI already runs Ruff, MyPy, Xenon, the pure unit tests, the tests in a real Home Assistant core,
+Hassfest and the HACS validation. Run the same commands locally when changing code, and check the
+change on a Home Assistant instance with a real Cube: the Cube's single-client protocol cannot be
+fully simulated.
 
 ## 3. Pull request
 
-Open a pull request with the changelog and version change, wait for the CI checks
-(`Hassfest` and the HACS `validate` job) and squash-merge it.
+Open a pull request with the changelog and version change, wait for **all** checks (tests on the
+current and the minimum Home Assistant version, lint, types, complexity, Hassfest and HACS
+`validate`) and squash-merge it. A release is not prepared from a red or skipped check; there are no
+documented exceptions.
 
 ## 4. Tag
 

@@ -68,10 +68,10 @@ jobs:
           mypy custom_components/maxcube_local
 
   ha-tests-min:
-    # Non-blocking: the integration against the oldest Home Assistant version it declares
-    # (hacs.json). pytest-homeassistant-custom-component 0.13.220 is the one pinned to 2025.3.0.
+    # The declared minimum (Home Assistant 2025.3.0, pytest-homeassistant-custom-component
+    # 0.13.220) must stay green. The options test awaits the scheduled reload so older cores do not
+    # leave a pending task at teardown. Verified locally on 2026-11-22.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7

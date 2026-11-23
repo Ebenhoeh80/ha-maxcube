@@ -64,9 +64,14 @@ class MaxCubeWindow(MaxCubeEntity, BinarySensorEntity):
         self._attr_unique_id = state.rf_address
 
     @property
-    def is_on(self) -> bool:
-        """Return True when the window is open."""
-        return bool(self._device_state.is_open)
+    def is_on(self) -> bool | None:
+        """Return True when the window is open, or None if the Cube did not report a state.
+
+        The 6-byte contact telegram carries no open/closed bit. Returning ``False`` there would
+        silently claim that every window is closed and could keep heating automations from
+        reacting to an open window.
+        """
+        return self._device_state.is_open
 
 
 class MaxCubeBattery(MaxCubeEntity, BinarySensorEntity):
