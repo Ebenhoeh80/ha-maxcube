@@ -612,14 +612,28 @@ async def test_the_hvac_modes_and_presets_are_written_to_the_cube(
     entity_id = _entity_id(hass, "climate", RADIATOR)
     device = cube.devices[0]
 
-    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="off")
-    assert device.target_temperature == 4.5
+    # A setpoint must leave AUTO and be sent together with MANUAL mode.
+    await _climate_call(hass, "set_temperature", entity_id, temperature=19.5)
+    assert device.mode == MAX_DEVICE_MODE_MANUAL
+    assert device.target_temperature == 19.5
+    assert cube.temperature_modes[-1] == (RADIATOR, 19.5, MAX_DEVICE_MODE_MANUAL)
 
-    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="heat")
-    assert device.target_temperature >= 5.0
-
+    # OFF from AUTO must also send MANUAL; otherwise the Cube keeps the weekly programme.
     await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="auto")
     assert device.mode == MAX_DEVICE_MODE_AUTOMATIC
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="off")
+    assert device.mode == MAX_DEVICE_MODE_MANUAL
+    assert device.target_temperature == 4.5
+    assert cube.temperature_modes[-1] == (RADIATOR, 4.5, MAX_DEVICE_MODE_MANUAL)
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "off"
+
+    # HEAT restores the real setpoint, not the 4.5 °C used for OFF.
+    await _climate_call(hass, "set_hvac_mode", entity_id, hvac_mode="heat")
+    assert device.mode == MAX_DEVICE_MODE_MANUAL
+    assert device.target_temperature == 19.5
+    assert cube.temperature_modes[-1] == (RADIATOR, 19.5, MAX_DEVICE_MODE_MANUAL)
 
     for preset, expected_mode in (
         ("boost", MAX_DEVICE_MODE_BOOST),
@@ -632,12 +646,21 @@ async def test_the_hvac_modes_and_presets_are_written_to_the_cube(
     device.mode = MAX_DEVICE_MODE_MANUAL
     await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="comfort")
     assert device.target_temperature == device.comfort_temperature
+    assert cube.temperature_modes[-1] == (
+        RADIATOR,
+        device.comfort_temperature,
+        MAX_DEVICE_MODE_MANUAL,
+    )
     await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="eco")
     assert device.target_temperature == device.eco_temperature
+    assert cube.temperature_modes[-1] == (
+        RADIATOR,
+        device.eco_temperature,
+        MAX_DEVICE_MODE_MANUAL,
+    )
     await _climate_call(hass, "set_preset_mode", entity_id, preset_mode="on")
     assert device.target_temperature == 30.5
-    await _climate_call(hass, "set_temperature", entity_id, temperature=19.5)
-    assert device.target_temperature == 19.5
+    assert cube.temperature_modes[-1] == (RADIATOR, 30.5, MAX_DEVICE_MODE_MANUAL)
 
 
 async def test_the_climate_state_reflects_mode_valve_and_preset(

@@ -24,7 +24,7 @@ Sie ist ein Config-Flow-Ersatz für die veraltete, nur per YAML konfigurierbare
   erkannt** (seine IP-Adresse wird vorausgefüllt); kein YAML.
 - **Climate**-Entitäten für Heizkörper- und Wandthermostate:
   - Zieltemperatur (0,5-°C-Schritte),
-  - HVAC-Modi Auto / Heizen / Aus,
+  - HVAC-Modi Auto / Heizen / Aus („Aus" = Handbetrieb mit 4,5 °C; „Heizen" stellt den letzten Sollwert wieder her),
   - Presets Boost, Komfort, Eco, Abwesend,
   - Heizaktion aus der Ventilstellung abgeleitet,
   - Komfort-/Eco-Sollwerte und Ventilstellung als Zusatz-Attribute.

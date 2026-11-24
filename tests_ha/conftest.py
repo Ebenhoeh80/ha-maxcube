@@ -19,6 +19,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from maxcube.device import (
+    MAX_DEVICE_MODE_AUTOMATIC,
     MAX_DEVICE_MODE_MANUAL,
     MAX_THERMOSTAT,
     MAX_WALL_THERMOSTAT,
@@ -189,6 +190,8 @@ class FakeCube:
         self.accept_commands = True
         self.written: list[tuple[str, str, list[dict[str, Any]]]] = []
         self.displays: list[tuple[str, bool]] = []  # (rf address, show actual temperature)
+        # (rf address, temperature, mode) of combined commands, as sent by the library.
+        self.temperature_modes: list[tuple[str, float | None, int | None]] = []
 
     @contextmanager
     def _in_use(self) -> Iterator[None]:
@@ -245,15 +248,29 @@ class FakeCube:
         return self.accept_writes
 
     def set_target_temperature(self, device: Any, temperature: float) -> bool:
-        with self._in_use():
-            self._check_command()
-            device.target_temperature = temperature
-        return self.accept_commands
+        return self.set_temperature_mode(device, temperature, None)
 
     def set_mode(self, device: Any, mode: int) -> bool:
+        return self.set_temperature_mode(device, None, mode)
+
+    def set_temperature_mode(
+        self, device: Any, temperature: float | None, mode: int | None
+    ) -> bool:
+        """Behave like the library's one-telegram temperature/mode command."""
         with self._in_use():
             self._check_command()
+            if mode is None:
+                mode = device.mode
+            if temperature is None:
+                temperature = (
+                    0 if mode == MAX_DEVICE_MODE_AUTOMATIC else device.target_temperature
+                )
             device.mode = mode
+            if temperature > 0:
+                device.target_temperature = int(temperature * 2) / 2.0
+            elif mode == MAX_DEVICE_MODE_AUTOMATIC:
+                device.target_temperature = 17.0  # the programmed temperature
+            self.temperature_modes.append((device.rf_address, temperature, mode))
         return self.accept_commands
 
     def write_display_setting(self, rf_address: str, show_actual: bool) -> bool:
