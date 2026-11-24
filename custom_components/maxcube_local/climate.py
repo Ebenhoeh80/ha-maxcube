@@ -22,7 +22,7 @@ from homeassistant.const import (
     PRECISION_TENTHS,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.core import HomeAssistant, SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
@@ -158,6 +158,39 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         """Initialize the thermostat."""
         super().__init__(coordinator, state, device)
         self._attr_unique_id = state.rf_address
+        self._last_heating_temperature: float | None = None
+        self._remember_heating_temperature(state)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Keep the last real heating setpoint when a poll brings a new snapshot."""
+        self._remember_heating_temperature()
+        super()._handle_coordinator_update()
+
+    def _remember_heating_temperature(self, state: DeviceState | None = None) -> None:
+        """Remember a manual setpoint so ``heat`` can undo ``off`` without losing it."""
+        state = state or self._device_state
+        temp = state.target_temperature
+        if (
+            state.mode == MAX_DEVICE_MODE_MANUAL
+            and temp is not None
+            and temp not in (OFF_TEMPERATURE, ON_TEMPERATURE)
+            and self.min_temp <= temp <= self.max_temp
+        ):
+            self._last_heating_temperature = temp
+
+    def _heating_target(self) -> float:
+        """Return the setpoint to restore when heating is switched on again."""
+        if self._last_heating_temperature is not None:
+            return self._last_heating_temperature
+        schedule = schedule_as_dict(self._schedule)
+        scheduled = scheduled_temperature(schedule, dt_util.now())
+        if scheduled is not None:
+            return scheduled
+        comfort = self._device_state.comfort_temperature
+        if comfort is not None:
+            return comfort
+        return self.min_temp
 
     @property
     def min_temp(self) -> float:
@@ -327,10 +360,9 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         if hvac_mode == HVACMode.OFF:
             await self._set_target_temperature(OFF_TEMPERATURE)
         elif hvac_mode == HVACMode.HEAT:
-            # Read from the library object, not the snapshot: the library updates it at once after
-            # a command, so "off" followed by "heat" within the refresh delay still sees the new value.
-            target = self._device.target_temperature or self.min_temp
-            await self._set_target_temperature(max(target, self.min_temp))
+            # Restore the last real setpoint, not the 4.5 °C the Cube reports while off.
+            target = min(max(self._heating_target(), self.min_temp), self.max_temp)
+            await self._set_target_temperature(target)
         elif hvac_mode == HVACMode.AUTO:
             await self._set_mode(MAX_DEVICE_MODE_AUTOMATIC)
 
@@ -355,9 +387,23 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
                 await self._set_target_temperature(eco)
 
     async def _set_target_temperature(self, temperature: float) -> None:
+        """Send temperature and MANUAL mode in one telegram.
+
+        The library's ``set_target_temperature`` keeps the current mode, so a setpoint sent while
+        the thermostat is in AUTO is overwritten by the weekly programme at the next poll. The
+        combined command makes OFF, HEAT, plain setpoints and temperature presets stick.
+        """
         await self.coordinator.async_cube_command(
-            self.coordinator.cube.set_target_temperature, self._device, temperature
+            self.coordinator.cube.set_temperature_mode,
+            self._device,
+            temperature,
+            MAX_DEVICE_MODE_MANUAL,
         )
+        if (
+            temperature not in (OFF_TEMPERATURE, ON_TEMPERATURE)
+            and self.min_temp <= temperature <= self.max_temp
+        ):
+            self._last_heating_temperature = temperature
         await self.coordinator.async_request_refresh()
 
     async def _set_mode(self, mode: int) -> None:

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-11-24
+
+### Fixed
+- **„Aus" und Zieltemperaturen bleiben jetzt stehen.** Der Cube akzeptiert eine Solltemperatur nur zusammen mit einem Modus. Bisher wurde beim Setzen von `Aus`, `Heizen`, einer Zieltemperatur oder eines temperaturbasierten Presets der alte Modus beibehalten: Im Wochenprogramm (`AUTO`) verschwand der Wert beim nächsten Poll wieder, und die Anzeige blieb auf „Auto". Alle diese Befehle senden jetzt einen kombinierten `set_temperature_mode`-Befehl mit `MANUAL`. `Aus` ist damit `MANUAL` + 4,5 °C und wird auch so angezeigt.
+- **„Heizen" stellt den letzten echten Sollwert wieder her** statt der 4,5 °C, die der Cube im Aus-Zustand meldet. Ist kein eigener Wert bekannt, wird der aktuelle Programmsollwert (sonst der Komfort-Sollwert) verwendet.
+- Die Climate-Kacheln im Heizungs-Dashboard zeigen jetzt einen Modus-Umschalter (`climate-hvac-modes`), damit Auto / Heizen / Aus direkt aus der Kachel bedient werden kann.
+
 ## [1.8.2] - 2026-11-23
 
 ### Fixed

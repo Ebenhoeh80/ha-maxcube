@@ -24,7 +24,7 @@ integration that ships with Home Assistant Core.
   (its IP address is pre-filled); no YAML.
 - **Climate** entities for radiator and wall thermostats:
   - target temperature (0.5 °C steps),
-  - HVAC modes Auto / Heat / Off,
+  - HVAC modes Auto / Heat / Off (Off = manual mode at 4.5 °C; Heat restores the last real setpoint),
   - presets Boost, Comfort, Eco, Away,
   - heating action derived from the valve position,
   - comfort/eco setpoints and valve position as extra attributes.
