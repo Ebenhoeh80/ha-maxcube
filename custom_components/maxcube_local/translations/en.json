@@ -212,6 +212,9 @@
     "display_radio_too_busy": {
       "message": "The Cube is too busy for one more radio message (about {detail} % of its radio time). Try again later."
     },
+    "temperature_radio_too_busy": {
+      "message": "The Cube is too busy for another temperature or mode change (about {detail} % of its radio time). Try again later."
+    },
     "schedule_radio_too_busy": {
       "message": "The copy would take the Cube to about {detail} % of its radio time, which is too much. Copy fewer days or to fewer thermostats, or try again later."
     },

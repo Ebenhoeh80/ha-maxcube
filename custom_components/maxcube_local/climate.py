@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     PRESET_AWAY,
     PRESET_BOOST,
     PRESET_COMFORT,
@@ -42,6 +44,7 @@ from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .schedule import (
     WEEK_DAYS,
     ScheduleError,
+    check_radio_budget,
     plan_request,
     scheduled_temperature,
 )
@@ -61,6 +64,12 @@ _SET_SCHEDULE_SCHEMA = {
 }
 
 PRESET_ON = "on"
+
+
+def _round_temperature(temperature: float) -> float:
+    """Snap to the Cube's half-degree grid; the library truncates instead of rounding."""
+    return math.floor(temperature * 2 + 0.5) / 2
+
 
 # Home Assistant 2026.11 renamed the temperature members of ClimateEntity to
 # native_* (the old names are deprecated and stop working in 2027.11). Older
@@ -262,6 +271,17 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
                 translation_placeholders={"duty": str(duty)},
             )
 
+    def _ensure_radio_budget(self) -> None:
+        """Refuse one more temperature/mode telegram when the radio budget is used up."""
+        try:
+            check_radio_budget(self.coordinator.data.duty_cycle, 1)
+        except ScheduleError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="temperature_radio_too_busy",
+                translation_placeholders={"detail": err.detail},
+            ) from err
+
     async def async_set_schedule(
         self,
         days: list[str] | None = None,
@@ -350,10 +370,24 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         return PRESET_NONE
 
     async def async_set_temperature(self, **kwargs: Any) -> None:  # noqa: ANN401
-        """Set a new target temperature."""
+        """Set a new target temperature, optionally changing the HVAC mode as well.
+
+        A MAX! thermostat cannot run AUTO with an own setpoint. When ``hvac_mode`` is
+        given, the mode wins: AUTO keeps the weekly programme, OFF uses 4.5 °C, and
+        HEAT uses the given temperature or restores the last real one.
+        """
+        hvac_mode = kwargs.get(ATTR_HVAC_MODE)
+        if hvac_mode == HVACMode.AUTO:
+            await self._set_mode(MAX_DEVICE_MODE_AUTOMATIC)
+            return
+        if hvac_mode == HVACMode.OFF:
+            await self._set_target_temperature(OFF_TEMPERATURE)
+            return
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is not None:
             await self._set_target_temperature(temp)
+        elif hvac_mode == HVACMode.HEAT:
+            await self.async_set_hvac_mode(HVACMode.HEAT)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set a new HVAC mode."""
@@ -393,6 +427,15 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         the thermostat is in AUTO is overwritten by the weekly programme at the next poll. The
         combined command makes OFF, HEAT, plain setpoints and temperature presets stick.
         """
+        temperature = _round_temperature(float(temperature))
+        state = self._device_state
+        if (
+            state.mode == MAX_DEVICE_MODE_MANUAL
+            and state.target_temperature is not None
+            and state.target_temperature == temperature
+        ):
+            return
+        self._ensure_radio_budget()
         await self.coordinator.async_cube_command(
             self.coordinator.cube.set_temperature_mode,
             self._device,
@@ -407,6 +450,9 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         await self.coordinator.async_request_refresh()
 
     async def _set_mode(self, mode: int) -> None:
+        if self._device_state.mode == mode:
+            return
+        self._ensure_radio_budget()
         await self.coordinator.async_cube_command(
             self.coordinator.cube.set_mode, self._device, mode
         )
