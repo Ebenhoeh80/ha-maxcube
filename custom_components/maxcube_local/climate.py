@@ -343,14 +343,19 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         return HVACMode.AUTO
 
     @property
-    def hvac_action(self) -> HVACAction:
-        """Return whether the valve is currently calling for heat."""
+    def hvac_action(self) -> HVACAction | None:
+        """Return the running action only when the Cube reports actuator feedback.
+
+        A wall thermostat has no valve and therefore no ``valve_position``. Reporting
+        ``IDLE`` there would claim a known, stopped actuator; HA must show no action
+        instead. The same applies to a radiator thermostat whose L entry was too short.
+        """
         if self.hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
-        valve = self._device_state.valve_position or 0
-        if valve > 0:
-            return HVACAction.HEATING
-        return HVACAction.IDLE
+        valve = self._device_state.valve_position
+        if valve is None:
+            return None
+        return HVACAction.HEATING if valve > 0 else HVACAction.IDLE
 
     @property
     def preset_mode(self) -> str:
@@ -373,18 +378,20 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs: Any) -> None:  # noqa: ANN401
         """Set a new target temperature, optionally changing the HVAC mode as well.
 
-        A MAX! thermostat cannot run AUTO with an own setpoint. When ``hvac_mode`` is
-        given, the mode wins: AUTO keeps the weekly programme, OFF uses 4.5 °C, and
-        HEAT uses the given temperature or restores the last real one.
+        A MAX! thermostat cannot run AUTO with an own setpoint. A mode-only request keeps
+        the weekly programme for AUTO; an explicit temperature always becomes a MANUAL
+        setpoint, even when the caller also sends ``hvac_mode: auto`` (the HA frontend
+        does this when a temperature is changed in a dialog that is set to AUTO).
+        OFF uses 4.5 °C, HEAT uses the given temperature or restores the last real one.
         """
         hvac_mode = kwargs.get(ATTR_HVAC_MODE)
-        if hvac_mode == HVACMode.AUTO:
-            await self._set_mode(MAX_DEVICE_MODE_AUTOMATIC)
-            return
+        temp = kwargs.get(ATTR_TEMPERATURE)
         if hvac_mode == HVACMode.OFF:
             await self._set_target_temperature(OFF_TEMPERATURE)
             return
-        temp = kwargs.get(ATTR_TEMPERATURE)
+        if hvac_mode == HVACMode.AUTO and temp is None:
+            await self._set_mode(MAX_DEVICE_MODE_AUTOMATIC)
+            return
         if temp is not None:
             await self._set_target_temperature(temp)
         elif hvac_mode == HVACMode.HEAT:

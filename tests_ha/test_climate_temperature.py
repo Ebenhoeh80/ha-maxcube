@@ -89,15 +89,18 @@ async def test_setpoints_are_rounded_to_half_degrees(
     assert cube.temperature_modes[-1] == (RADIATOR, sent, MAX_DEVICE_MODE_MANUAL)
 
 
-async def test_hvac_mode_in_set_temperature_wins_over_the_setpoint(
+async def test_hvac_mode_auto_without_a_setpoint_keeps_the_weekly_programme(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    """A MAX! thermostat cannot combine AUTO with an own setpoint; the mode must win."""
+    """A mode-only AUTO request switches back to the weekly programme."""
     await _setup(hass, config_entry)
     entity_id = _entity_id(hass)
 
     await _set_temperature(hass, entity_id, temperature=19.5)
-    await _set_temperature(hass, entity_id, temperature=21.0, hvac_mode="auto")
+    await hass.services.async_call(
+        "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "auto"}, blocking=True
+    )
+    await hass.async_block_till_done()
     assert cube.temperature_modes[-1] == (RADIATOR, 0.0, MAX_DEVICE_MODE_AUTOMATIC)
     await config_entry.runtime_data.async_refresh()  # the 2 s read-back cooldown may defer it
     await hass.async_block_till_done()
@@ -108,6 +111,35 @@ async def test_hvac_mode_in_set_temperature_wins_over_the_setpoint(
 
     await _set_temperature(hass, entity_id, temperature=20.5, hvac_mode="heat")
     assert cube.temperature_modes[-1] == (RADIATOR, 20.5, MAX_DEVICE_MODE_MANUAL)
+
+
+async def test_an_explicit_setpoint_beats_hvac_mode_auto(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """The frontend sends AUTO with the setpoint; an explicit target must still stick."""
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass)
+
+    await _set_temperature(hass, entity_id, temperature=20.0, hvac_mode="auto")
+
+    assert cube.temperature_modes[-1] == (RADIATOR, 20.0, MAX_DEVICE_MODE_MANUAL)
+
+    commands = len(cube.temperature_modes)
+    await _set_temperature(hass, entity_id, temperature=20.0, hvac_mode="auto")
+    assert len(cube.temperature_modes) == commands  # the no-change guard must still hold
+
+
+@pytest.mark.parametrize("target", [20.5, 16.0, 17.5])
+async def test_target_temperatures_are_sent_as_manual(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, target: float
+) -> None:
+    """Representative targets, including the room values used live, stay MANUAL."""
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass)
+
+    await _set_temperature(hass, entity_id, temperature=target)
+
+    assert cube.temperature_modes[-1] == (RADIATOR, target, MAX_DEVICE_MODE_MANUAL)
 
 
 async def test_a_busy_cube_refuses_a_temperature_change(

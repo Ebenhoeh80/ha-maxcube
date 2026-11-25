@@ -2,7 +2,7 @@
 
 This page records how the integration works, where its time goes, what can fail and how it
 recovers, what is checked automatically, and which options were rejected and why. Numbers are
-measured, with date and method. Last updated: 2026-11-25 (after release 1.8.4).
+measured, with date and method. Last updated: 2026-11-25 (after the v1.8.5 verification and the live Cube investigation).
 
 ## 1. Architecture and data flow
 
@@ -116,19 +116,23 @@ poll corrects it. No code change was made (P3 closed as documented behaviour).
 | Ruff (E, W, F, I, B, C4, UP, SIM, RET, PL, C901, ANN) | no findings | pass (tests are exempt from PLR2004, PLC0415 and ANN) |
 | MyPy with the real Home Assistant types | no errors | pass |
 | pytest, unit tests (Python 3.12, 3.13) | all pass | 175 passed, 2 xfailed (local recheck 2026-11-25) |
-| pytest in a real Home Assistant core (2025.3 and 2026.2) | all pass | 128 passed in each for 1.8.3; one more HA test added locally on 2026-11-24 |
+| pytest in a real Home Assistant core (2025.3 and 2026.2) | all pass | 128 passed in each for 1.8.3; 145 passed locally for 1.8.5 (HA 2026.10.4, 2026-11-25) |
 | Coverage (both suites combined) | at least 95 % | 96.43 % |
 | hassfest, HACS validation | valid | pass |
 | xenon | absolute B, modules A, average A | pass |
 | CodeQL (security-and-quality) | no new alerts | pass |
 | Home Assistant Quality Scale | `quality_scale.yaml` | Gold; Platinum open (`async-dependency`, `strict-typing`) |
 
-Rechecked locally on 2026-11-25 for 1.8.4: Ruff clean, Xenon clean (`--max-absolute B`), MyPy clean
-with the real Home Assistant types, 175 unit tests passed (2 xfailed), and the full Home Assistant
-suite passed. CI additionally runs Hassfest and HACS `validate`, both green for 1.8.4.
+Rechecked locally on 2026-11-25 for 1.8.5: Ruff clean, Xenon clean (`--max-absolute B`), MyPy clean
+with the real Home Assistant types, 175 unit tests passed (2 xfailed), 145 Home Assistant tests passed,
+`node --check` clean and `git diff --check` clean. CI additionally runs Hassfest and HACS `validate`,
+both green for 1.8.4 (1.8.5 pending).
 
-Not available locally: SonarQube, Semgrep, py-spy and Scalene. A live Cube test is not possible while
-the integration is disabled in HAOS; the radio-related changes are covered by unit and HA tests only.
+Not available locally: SonarQube, Semgrep, py-spy and Scalene. A live Cube test was possible on
+2026-11-25: the integration is loaded in HAOS with DEBUG logging, and raw `s:` telegrams were observed
+in the log. It confirmed that RF flag `04` addresses a room and that five devices had wrong internal
+room IDs in their `C:` configuration, which coupled setpoint commands between rooms. Correcting those
+IDs with `0x22` is a Cube configuration change, not part of the integration code.
 
 ## 6. Decisions and rejected options
 
