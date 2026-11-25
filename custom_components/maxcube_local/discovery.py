@@ -74,6 +74,9 @@ def discover_cubes(timeout: float = 2.0) -> list[dict[str, str]]:
         # Binding to an ephemeral port instead would make the reply unreachable (verified on real
         # hardware in app-maxcube, docs/HARDWARE-VERIFY.md §3). A busy port therefore means that
         # no reply can be received here, so do not pretend the search worked with a fallback port.
+        # Binding to all interfaces is intended (CodeQL py/bind-socket-all-network-interfaces,
+        # reviewed): the reply arrives on whichever interface the routing table picks for the
+        # broadcast, and the datagram is only accepted when it starts with ``eQ3MaxAp``.
         try:
             sock.bind(("", DISCOVERY_PORT))
         except OSError:

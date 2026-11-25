@@ -952,8 +952,6 @@ async def test_a_poll_and_a_command_never_use_the_cube_at_the_same_time(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
     """The Cube accepts a single connection; overlapping calls make one of them fail."""
-    import asyncio
-
     await _setup(hass, config_entry)
     coordinator = config_entry.runtime_data
     entity_id = _entity_id(hass, "climate", RADIATOR)
