@@ -38,7 +38,7 @@ from maxcube.device import (
     MaxDevice,
 )
 
-from .const import DOMAIN, MAX_DUTY_CYCLE_FOR_WRITING
+from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
 from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .schedule import (
@@ -261,15 +261,16 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         """Return the weekly heating programme (service ``get_schedule``)."""
         return schedule_as_dict(self._schedule)
 
-    def _ensure_radio_time_left(self) -> None:
-        """Refuse to write while the Cube has used (almost) all of its radio time."""
-        duty = self.coordinator.data.duty_cycle
-        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
+    def _ensure_radio_time_left(self, telegrams: int) -> None:
+        """Refuse a write whose telegrams would use up the Cube's radio time budget."""
+        try:
+            check_radio_budget(self.coordinator.data.duty_cycle, telegrams)
+        except ScheduleError as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
-                translation_key="schedule_duty_cycle_high",
-                translation_placeholders={"duty": str(duty)},
-            )
+                translation_key="schedule_radio_too_busy",
+                translation_placeholders={"detail": err.detail},
+            ) from err
 
     def _ensure_radio_budget(self) -> None:
         """Refuse one more temperature/mode telegram when the radio budget is used up."""
@@ -297,7 +298,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         programme = _validated_programme(days, periods, by_day)
         if dry_run:
             return {"dry_run": True, "would_write": programme}
-        self._ensure_radio_time_left()
+        self._ensure_radio_time_left(len(programme))
         results = await self.coordinator.async_write_schedule(self._device, programme)
         failed = [day for day, result in results.items() if result == "failed"]
         if failed:

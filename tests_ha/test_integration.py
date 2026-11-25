@@ -49,6 +49,22 @@ def _entity_id(hass: HomeAssistant, domain: str, unique_id: str) -> str:
     return entity_id
 
 
+async def test_setup_reads_the_cube_twice_once_at_construction_once_at_first_poll(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """The constructor's initial read and the first coordinator poll are both real (P3).
+
+    This is a one-off cost at setup, not a repeated read-back. The second read is what fills the
+    first snapshot; skipping it would change setup/identity handling and is deliberately not done.
+    """
+    await _setup(hass, config_entry)
+    assert cube.constructions == 1
+    assert cube.updates == 2
+    coordinator = config_entry.runtime_data
+    await coordinator.async_refresh()
+    assert cube.updates == 3
+
+
 async def test_setup_creates_the_entities_and_the_hub_device(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
@@ -244,6 +260,28 @@ async def test_set_schedule_refuses_when_the_cube_is_busy(
             },
             blocking=True,
         )
+    assert cube.written == []
+
+
+async def test_set_schedule_projects_the_duty_cycle_of_all_days(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """Seven telegrams must be refused when they would exceed the radio budget."""
+    await _setup(hass, config_entry)
+    cube.duty_cycle = 85  # below 90 %, but seven writes would take it to about 104.6 %
+    await config_entry.runtime_data.async_refresh()
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(
+            DOMAIN,
+            "set_schedule",
+            {
+                "entity_id": _entity_id(hass, "climate", RADIATOR),
+                "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+                "periods": [{"until": "24:00", "temperature": 21}],
+            },
+            blocking=True,
+        )
+    assert raised.value.translation_key == "schedule_radio_too_busy"
     assert cube.written == []
 
 
@@ -525,6 +563,21 @@ async def test_reconfigure_shows_an_error_when_the_new_address_does_not_answer(
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+async def test_reconfigure_reports_an_unexpected_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    await _setup(hass, config_entry)
+    result = await config_entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.maxcube_local.config_flow._try_connect",
+        side_effect=ValueError("unexpected"),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: NEW_HOST, "port": 62910}
+        )
+    assert result["errors"] == {"base": "unknown"}
+
+
 async def test_the_user_flow_creates_an_entry(hass: HomeAssistant, cube: FakeCube) -> None:
     with (
         patch("custom_components.maxcube_local.config_flow.discover_cubes", return_value=[]),
@@ -747,6 +800,33 @@ async def test_a_serial_of_the_wrong_length_is_not_sent(
     with patch("custom_components.maxcube_local.button.socket.socket") as sock:
         await button.async_press()
     assert not sock.called
+
+
+async def test_a_serial_with_invalid_characters_is_not_sent(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.button import MaxCubeRebootButton
+
+    await _setup(hass, config_entry)
+    button = MaxCubeRebootButton(config_entry.runtime_data)
+    button.hass = hass
+    button._serial = "ABCDEFÖHIJ"  # ten characters, but not ASCII
+    with patch("custom_components.maxcube_local.button.socket.socket") as sock:
+        await button.async_press()
+    assert not sock.called
+
+
+async def test_a_socket_error_during_creation_does_not_raise(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    from custom_components.maxcube_local.button import MaxCubeRebootButton
+
+    await _setup(hass, config_entry)
+    with patch(
+        "custom_components.maxcube_local.button.socket.socket",
+        side_effect=OSError("no socket"),
+    ):
+        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
 
 
 async def test_a_device_paired_later_gets_its_entities_without_a_reload(

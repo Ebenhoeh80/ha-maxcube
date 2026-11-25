@@ -23,6 +23,7 @@ def make_cube() -> linkstatus.LinkStatusMaxCube:
     cube.initialized, cube.device_error, cube.link_error = {}, {}, {}
     cube.last_heard, cube.raw_flags = {}, {}
     cube.parse_rf_address = lambda raw: raw.hex()  # type: ignore[method-assign]
+    cube._now = lambda: datetime.now(UTC)
     return cube
 
 
@@ -93,3 +94,14 @@ def test_a_short_submessage_without_flag_bytes_only_counts_as_heard() -> None:
     cube = make_cube()
     feed(cube, bytes([4]) + ADDR + b"\x00")
     assert "0fdaed" in cube.last_heard and "0fdaed" not in cube.initialized
+
+
+def test_the_injected_clock_drives_timestamps_and_staleness() -> None:
+    cube = make_cube()
+    first = datetime(2026, 11, 24, 12, 0, tzinfo=UTC)
+    cube._now = lambda: first
+    feed(cube, submessage(ADDR, 0, 0))
+    assert cube.last_heard["0fdaed"] == first
+    assert cube.device_status("0fdaed", 90).stale is False
+    cube._now = lambda: first + timedelta(seconds=91)
+    assert cube.device_status("0fdaed", 90).stale is True

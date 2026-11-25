@@ -334,7 +334,7 @@ def test_only_plain_hh_mm_times_are_taken() -> None:
 
 
 def test_temperatures_that_are_not_numbers_are_refused() -> None:
-    for odd in (float("nan"), float("inf"), float("-inf")):
+    for odd in (float("nan"), float("inf"), float("-inf"), "abc", None, [21.0]):
         assert _error([_period("24:00", odd)]) == "bad_temperature", odd
 
 

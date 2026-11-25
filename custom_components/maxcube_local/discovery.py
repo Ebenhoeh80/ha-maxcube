@@ -10,7 +10,6 @@ The sockets are blocking, so :func:`discover_cubes` must be run in the executor.
 
 from __future__ import annotations
 
-import contextlib
 import re
 import socket
 
@@ -71,10 +70,14 @@ def discover_cubes(timeout: float = 2.0) -> list[dict[str, str]]:
     except OSError:
         return []  # no usable network interface
     try:
-        # Binding to the discovery port catches replies that some Cubes broadcast back; if it is
-        # busy, fall back to an ephemeral port (the Cube still answers the unicast source port).
-        with contextlib.suppress(OSError):
+        # The Cube sends its reply to the sender's port 23272, not to an arbitrary source port.
+        # Binding to an ephemeral port instead would make the reply unreachable (verified on real
+        # hardware in app-maxcube, docs/HARDWARE-VERIFY.md §3). A busy port therefore means that
+        # no reply can be received here, so do not pretend the search worked with a fallback port.
+        try:
             sock.bind(("", DISCOVERY_PORT))
+        except OSError:
+            return []  # another process owns the reply port
         sock.settimeout(timeout)
         try:
             sock.sendto(_REQUEST, ("255.255.255.255", DISCOVERY_PORT))

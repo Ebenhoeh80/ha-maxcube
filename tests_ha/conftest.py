@@ -173,6 +173,9 @@ class FakeCube:
         self.rooms = [room]
         self.devices = [_thermostat(), _wall_thermostat(), _window()]
         self.use_persistent_connection = True
+        # The real library constructor reads H/M/C/L once; count it like update() so tests can
+        # see that setup causes one constructor read plus one coordinator poll.
+        self.constructions = 0
         self.updates = 0
         self.disconnects = 0
         self.fail_updates = 0
@@ -285,7 +288,13 @@ class FakeCube:
 def cube() -> Iterator[FakeCube]:
     """Patch the integration's cube class with a fake and return the fake."""
     fake = FakeCube()
-    with patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", lambda *a, **k: fake):
+
+    def construct(*args: Any, **kwargs: Any) -> FakeCube:
+        fake.constructions += 1
+        fake.updates += 1  # the constructor's blocking initial read
+        return fake
+
+    with patch("custom_components.maxcube_local.coordinator.LinkStatusMaxCube", construct):
         yield fake
 
 

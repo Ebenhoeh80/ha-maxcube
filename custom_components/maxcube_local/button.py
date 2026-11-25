@@ -27,6 +27,7 @@ from maxcube.device import MaxDevice
 
 from .const import DOMAIN
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator
+from .discovery import is_valid_serial
 from .entity import MaxCubeEntity, async_add_devices_as_they_appear
 from .snapshot import DeviceState
 
@@ -39,7 +40,6 @@ CUBE_BROADCAST = "255.255.255.255"
 # Payload prefix the Cube expects; 'R' is the reboot opcode.
 _MAGIC_PREFIX = b"eQ3Max*\x00"
 _REBOOT_OPCODE = b"R"
-_SERIAL_LENGTH = 10
 
 # Bound the blocking socket call; the send is fire-and-forget.
 _SEND_TIMEOUT = 3.0
@@ -99,11 +99,10 @@ class MaxCubeRebootButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Send the reboot datagram to the Cube."""
-        if len(self._serial) != _SERIAL_LENGTH:
+        if not is_valid_serial(self._serial):
             _LOGGER.error(
-                "Cannot reboot MAX! Cube: its identity has an unexpected length (%d, expected %d)",
-                len(self._serial),
-                _SERIAL_LENGTH,
+                "Cannot reboot MAX! Cube: its identity is not a valid serial number (%r)",
+                self._serial,
             )
             return
 
@@ -116,15 +115,17 @@ class MaxCubeRebootButton(ButtonEntity):
     @staticmethod
     def _send_reboot(payload: bytes) -> None:
         """Broadcast the reboot datagram; never raises on a network error."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(_SEND_TIMEOUT)
+        sock = None
         try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(_SEND_TIMEOUT)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             sock.sendto(payload, (CUBE_BROADCAST, CUBE_CONTROL_PORT))
         except OSError as err:
             _LOGGER.warning("Could not send the reboot request to the MAX! Cube: %s", err)
         finally:
-            sock.close()
+            if sock is not None:
+                sock.close()
 
 
 class MaxCubeDisplayButton(MaxCubeEntity, ButtonEntity):

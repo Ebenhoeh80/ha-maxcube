@@ -32,7 +32,6 @@ from .const import (
     CONF_CUBE_SERIAL,
     DOMAIN,
     M_MESSAGE_SAVE_DELAY,
-    MAX_DUTY_CYCLE_FOR_WRITING,
     POLL_RETRY_DELAY,
     REDISCOVER_COOLDOWN,
     REQUEST_REFRESH_COOLDOWN,
@@ -667,13 +666,14 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
                 2 * SCHEDULE_VERIFY_DELAY,
             )
             return
-        duty = getattr(self.cube, "duty_cycle", None)
-        if duty is not None and duty >= MAX_DUTY_CYCLE_FOR_WRITING:
+        try:
+            check_radio_budget(getattr(self.cube, "duty_cycle", None), len(differing))
+        except ScheduleError as err:
             _LOGGER.warning(
-                "Not retrying the weekly programme of %s for %s: radio duty cycle is %d %%",
+                "Not retrying the weekly programme of %s for %s: %s",
                 name,
                 ", ".join(differing),
-                duty,
+                err,
             )
             return
         _LOGGER.info(

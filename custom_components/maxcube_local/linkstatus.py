@@ -125,7 +125,7 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
 
         super().parse_l_message(message)
 
-        stamp = datetime.now(UTC)
+        stamp = self._now().astimezone(UTC)
         for entry in split_l_entries(data):
             rf_address = self.parse_rf_address(entry[1:4])
             self.last_heard[rf_address] = stamp
@@ -152,7 +152,7 @@ class LinkStatusMaxCube(MaxCubeWithStatus):
         if last_heard is None:
             stale = True
         else:
-            age = (datetime.now(UTC) - last_heard).total_seconds()
+            age = (self._now().astimezone(UTC) - last_heard).total_seconds()
             stale = age > stale_after
 
         return DeviceStatus(
