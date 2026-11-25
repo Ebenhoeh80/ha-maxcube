@@ -168,11 +168,18 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         super().__init__(coordinator, state, device)
         self._attr_unique_id = state.rf_address
         self._last_heating_temperature: float | None = None
+        # The Cube confirms a write in seconds, the next HA poll can be a minute away.
+        # Keep the just-sent value until that poll so a second request is compared
+        # against what the device actually has, not against the stale snapshot.
+        self._pending_temperature: float | None = None
+        self._pending_mode: int | None = None
         self._remember_heating_temperature(state)
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Keep the last real heating setpoint when a poll brings a new snapshot."""
+        self._pending_temperature = None
+        self._pending_mode = None
         self._remember_heating_temperature()
         super()._handle_coordinator_update()
 
@@ -218,7 +225,9 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         return temp if temp else None
 
     def _target_temperature(self) -> float | None:
-        """Return the target temperature."""
+        """Return the target, showing a just-sent setpoint until the Cube confirms it."""
+        if self._pending_temperature is not None:
+            return self._pending_temperature
         return self._device_state.target_temperature
 
     if _NATIVE_TEMPERATURES:
@@ -436,9 +445,12 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
         combined command makes OFF, HEAT, plain setpoints and temperature presets stick.
         """
         temperature = _round_temperature(float(temperature))
+        if self._pending_temperature == temperature:
+            return
         state = self._device_state
         if (
-            state.mode == MAX_DEVICE_MODE_MANUAL
+            self._pending_temperature is None
+            and state.mode == MAX_DEVICE_MODE_MANUAL
             and state.target_temperature is not None
             and state.target_temperature == temperature
         ):
@@ -455,13 +467,19 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
             and self.min_temp <= temperature <= self.max_temp
         ):
             self._last_heating_temperature = temperature
+        self._pending_temperature = temperature
+        self._pending_mode = MAX_DEVICE_MODE_MANUAL
+        self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
 
     async def _set_mode(self, mode: int) -> None:
-        if self._device_state.mode == mode:
+        if self._pending_mode == mode:
+            return
+        if self._pending_mode is None and self._device_state.mode == mode:
             return
         self._ensure_radio_budget()
         await self.coordinator.async_cube_command(
             self.coordinator.cube.set_mode, self._device, mode
         )
+        self._pending_mode = mode
         await self.coordinator.async_request_refresh()

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-11-25
+
+### Fixed
+- **Ein zweiter Sollwert innerhalb eines Poll-Intervalls geht nicht mehr verloren.** Der Cube bestätigt ein Telegramm in Sekunden, der nächste HA-Poll kann aber eine Minute auf sich warten lassen. Die "Keine Änderung"-Prüfung verglich bisher nur den Poll-Cache: Wurde erst ein neuer Wert gesetzt und dann innerhalb dieses Fensters der alte Wert erneut angefordert, wurde das zweite Telegramm unterdrückt und der Cube blieb auf dem ersten Wert. Sollwert und Modus werden jetzt bis zur nächsten Bestätigung als "gesendet" vorgemerkt und gegen diesen Wert geprüft.
+- **Ein direkter Moduswechsel nach einem Sollwert wird nicht mehr verschluckt.** Ein Sollwert sendet Modus `MANUAL` zusammen mit der Temperatur. Eine direkt danach kommende Anfrage auf `Auto` sah im veralteten Cache noch `Auto` und wurde verworfen; jetzt gilt auch hier der vorgemerkte Modus.
+- **Die Anzeige aktualisiert den Sollwert sofort nach dem Senden.** Bisher war der neue Wert erst nach dem nächsten Poll (bis zu 60 s) in Home Assistant sichtbar.
+
 ## [1.8.5] - 2026-11-25
 
 ### Fixed
