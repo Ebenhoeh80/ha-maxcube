@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Unveränderte Sollwerte und Modi senden kein Funktelegramm mehr.** Automationen, die denselben Wert erneut setzen, erhöhten sonst den Duty Cycle des Cube (im Benchmark von 4 % auf 21 %).
+- **Temperatur- und Modus-Befehle prüfen jetzt das Funkbudget.** Ab 90 % Duty Cycle wird der Befehl abgelehnt, statt dass die Bibliothek bis zu 30 s retryt und den einen Worker blockiert.
+- **`climate.set_temperature` berücksichtigt jetzt `hvac_mode`.** `auto` behält das Wochenprogramm, `off` schaltet aus, `heat` setzt die übergebene Temperatur als MANUAL-Sollwert.
+- **Sollwerte werden auf halbe Grade gerundet** statt vom Cube abgeschnitten zu werden (21,4 °C → 21,5 °C).
+
 ## [1.8.3] - 2026-11-24
 
 ### Fixed
