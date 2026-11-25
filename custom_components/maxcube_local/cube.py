@@ -20,7 +20,12 @@ from maxcube.device import MAX_DEVICE_MODE_AUTOMATIC, MAX_DEVICE_MODE_MANUAL, Ma
 from maxcube.thermostat import MaxThermostat
 
 from .display import encode_display_setting
-from .schedule import PROGRAMME_OFFSET, encode_set_programme, parse_week_program
+from .schedule import (
+    PROGRAMME_OFFSET,
+    encode_set_programme,
+    parse_week_program,
+    scheduled_temperature,
+)
 
 _DUTY_CYCLE_FIELD = 5
 _FREE_SLOTS_FIELD = 6
@@ -40,9 +45,10 @@ def split_l_entries(data: bytes) -> list[bytes]:
     """Split the bytes of an ``L`` message into device entries, each limited by its own length byte.
 
     The length byte counts the bytes after itself, so an entry covers ``length + 1`` bytes. Entries
-    that are too short for an address, or that run past the end of the message, are left out. The
-    library does not limit its reads like this: a short last entry makes it read past the end and
-    raise, which drops the status of every device in the message.
+    that are too short for an address, or that run past the end of the message, are left out. A bad
+    length stops the scan: there is no safe resync point, so the remaining entries are discarded.
+    The library does not limit its reads like this: a short last entry makes it read past the end
+    and raise, which drops the status of every device in the message.
     """
     entries = []
     pos = 0
@@ -110,6 +116,7 @@ class MaxCubeWithStatus(MaxCube):
     ) -> None:
         # Set before super().__init__(): it reads the Cube, and the M message is parsed then.
         self.last_m_message = last_m_message
+        self._now = now
         super().__init__(host, port, now)
 
     def write_day_schedule(
@@ -125,6 +132,65 @@ class MaxCubeWithStatus(MaxCube):
         message = encode_set_programme(thermostat.rf_address, thermostat.room_id, day, slots)
         commander = self._MaxCube__commander  # the library's private connection handler
         return bool(commander.send_radio_msg(message))
+
+    def set_mode(self, thermostat: MaxDevice, mode: int) -> bool:
+        """Set a mode without the library's wall-thermostat ``AttributeError``.
+
+        ``MaxCube.set_mode`` delegates to ``set_temperature_mode`` with no temperature. After a
+        successful AUTO telegram the library calls ``thermostat.get_programmed_temp_at()``, but
+        that method exists only on radiator thermostats (upstream issue #45): switching a wall
+        thermostat to AUTO raises ``AttributeError`` after the telegram was already sent. This
+        sends the byte-identical telegram and takes the programme temperature from the exact
+        programme this integration decodes, so the entity state stays correct on both device types.
+        """
+        if not thermostat.is_thermostat() and not thermostat.is_wallthermostat():
+            return False
+        temperature = (
+            0
+            if mode == MAX_DEVICE_MODE_AUTOMATIC
+            else (thermostat.target_temperature or 0)
+        )
+        value = int(temperature * 2) + (mode << 6)
+        message = (
+            "000440000000"
+            + thermostat.rf_address.upper()
+            + f"{thermostat.room_id:02X}"
+            + f"{value:02X}"
+        )
+        commander = self._MaxCube__commander  # the library's private connection handler
+        if not commander.send_radio_msg(message):
+            return False
+        self._apply_mode_state(thermostat, mode, temperature)
+        return True
+
+    def _programme_for(self, thermostat: MaxDevice) -> dict | None:
+        """Return the exact programme of the device or of another device in the same room."""
+        schedule = getattr(thermostat, "schedule", None)
+        if schedule:
+            return schedule
+        if thermostat.room_id is None:
+            return None
+        for device in self.devices:
+            if device.room_id == thermostat.room_id:
+                schedule = getattr(device, "schedule", None)
+                if schedule:
+                    return schedule
+        return None
+
+    def _apply_mode_state(self, thermostat: MaxDevice, mode: int, temperature: float) -> None:
+        """Update the local setpoint after a successful mode telegram."""
+        thermostat.mode = mode
+        if temperature > 0:
+            thermostat.target_temperature = int(temperature * 2) / 2.0
+            return
+        if mode != MAX_DEVICE_MODE_AUTOMATIC:
+            return
+        schedule = self._programme_for(thermostat)
+        if not schedule:
+            return
+        programmed = scheduled_temperature(schedule, self._now())
+        if programmed is not None:
+            thermostat.target_temperature = programmed
 
     def write_display_setting(self, rf_address: str, show_actual: bool) -> bool:
         """Send the display setting to a wall thermostat; True if the Cube took the telegram.
@@ -176,7 +242,12 @@ class MaxCubeWithStatus(MaxCube):
                 return
         self.m_message_missing = True
         if self.last_m_message:
-            super().parse_m_message(_M_ARGUMENT_PREFIX + self.last_m_message)
+            try:
+                super().parse_m_message(_M_ARGUMENT_PREFIX + self.last_m_message)
+            except (IndexError, ValueError, struct.error, binascii.Error, UnicodeDecodeError):
+                # A damaged message from storage must not fail the whole poll. Drop it so the next
+                # readable live message can replace it.
+                self.last_m_message = None
 
     def parse_h_message(self, message: str) -> None:
         """Parse the H message as the library does, and keep the Cube's status values."""

@@ -111,6 +111,17 @@ def test_an_unreadable_m_with_memory_uses_the_memory() -> None:
     assert cube.m_message_missing is True
 
 
+def test_a_broken_remembered_message_is_discarded_without_failing_the_poll() -> None:
+    cube = bare_cube()
+    cube.last_m_message = "!!!not base64!!!"
+
+    cube.parse_m_message("00,01,")
+
+    assert cube.devices == []
+    assert cube.m_message_missing is True
+    assert cube.last_m_message is None
+
+
 @pytest.mark.parametrize("message", ["", "00,01", "00,01,"])
 def test_an_empty_or_short_m_without_memory_does_nothing(message: str) -> None:
     cube = bare_cube()

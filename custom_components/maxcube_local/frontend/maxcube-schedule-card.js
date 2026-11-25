@@ -444,9 +444,10 @@ class MaxCubeScheduleCard extends HTMLElement {
     }
     const i = this._sel.zone;
     list.splice(i, 1);
-    // The day must stay contiguous: the previous zone now runs until the deleted end.
-    if (i > 0) list[i - 1].until = this._periods()[Math.min(i, list.length - 1)]?.until || "24:00";
-    if (i === 0) list[0].until = list[0].until || "24:00";
+    // The day must stay contiguous: the previous zone now runs until the deleted end, and the
+    // remaining last zone must always end at 24:00 (validateDay requires it).
+    if (i > 0) list[i - 1].until = list[Math.min(i, list.length - 1)]?.until || "24:00";
+    list[list.length - 1].until = "24:00";
     this._sel.zone = Math.max(0, i - 1);
     this._dirty = true;
     this._changedDays.add(this._sel.day);
@@ -825,7 +826,7 @@ class MaxCubeScheduleCard extends HTMLElement {
             <div class="edge l" data-edge="start"></div>
             <span class="zt">${fmtTemp(p.temp)}°</span>
             <div class="edge r" data-edge="end"></div>
-            ${changed ? '<span class="changed-dot" title="${T.changed}"></span>' : ""}
+            ${changed ? `<span class="changed-dot" title="${esc(T.changed)}"></span>` : ""}
           </div>`;
         })
         .join("");

@@ -140,7 +140,10 @@ def _minutes_of(until: str) -> int:
 
 def _checked_temperature(value: float | str) -> float:
     """Return the temperature if it is a half degree within the range the thermostat accepts."""
-    temp = float(value)
+    try:
+        temp = float(value)
+    except (TypeError, ValueError):
+        raise ScheduleError("bad_temperature", str(value)) from None
     if not MIN_TEMPERATURE <= temp <= MAX_TEMPERATURE or (temp * 2) % 1:
         raise ScheduleError("bad_temperature", str(temp))
     return temp

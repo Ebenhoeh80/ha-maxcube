@@ -252,6 +252,12 @@ def test_a_full_window_entry_reports_the_open_bit(bits2: int, expected: bool) ->
     assert window.is_open is expected
 
 
+def test_a_bad_length_in_the_middle_discards_the_rest_of_the_l_message() -> None:
+    good = bytes([11]) + bytes(11)
+    bad = bytes([2]) + bytes(2)
+    assert cube_module.split_l_entries(good + bad + good) == [good]
+
+
 def test_a_window_reports_unknown_after_a_short_entry_replaces_an_open_one() -> None:
     """A later 6-byte telegram must clear a previously reported open state."""
     window = MaxWindowShutter()

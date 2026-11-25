@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -115,6 +114,18 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    async def _check_new_address(self, host: str, port: int) -> tuple[str | None, str | None]:
+        """Return ``(serial, error_key)`` when a new address is tried during reconfigure."""
+        try:
+            serial = await self.hass.async_add_executor_job(_try_connect, host, port)
+        except OSError:
+            _LOGGER.debug("No answer from the MAX! Cube at %s:%s", host, port)
+            return None, None
+        except Exception:  # noqa: BLE001 - shown to the user as an unknown error
+            _LOGGER.exception("Unexpected error while connecting to the MAX! Cube")
+            return None, "unknown"
+        return serial, None
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -128,10 +139,10 @@ class MaxCubeConfigFlow(ConfigFlow, domain=DOMAIN):
                 for other in self._async_current_entries()
             ):
                 return self.async_abort(reason="already_configured")
-            serial: str | None = None
-            with contextlib.suppress(OSError):
-                serial = await self.hass.async_add_executor_job(_try_connect, host, port)
-            if not serial:
+            serial, error = await self._check_new_address(host, port)
+            if error:
+                errors["base"] = error
+            elif not serial:
                 errors["base"] = "cannot_connect"
             else:
                 expected = entry.data.get(CONF_CUBE_SERIAL)

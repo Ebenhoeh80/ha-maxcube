@@ -66,9 +66,12 @@ def test_other_packets_are_ignored_and_the_same_cube_counts_once() -> None:
     assert cubes == [{"host": "192.168.1.50", "serial": "KEQ0523864"}]
 
 
-def test_a_busy_port_does_not_stop_the_search() -> None:
-    cubes, _ = run([(ANSWER, ("192.168.1.50", 23272))], bind_fails=True)
-    assert len(cubes) == 1
+def test_a_busy_discovery_port_cannot_receive_the_reply() -> None:
+    """The Cube answers on port 23272; a fallback port would silently find nothing."""
+    cubes, fake = run([(ANSWER, ("192.168.1.50", 23272))], bind_fails=True)
+    assert cubes == []
+    assert fake.sent == []
+    assert fake.closed
 
 
 def test_nothing_answering_gives_an_empty_list() -> None:

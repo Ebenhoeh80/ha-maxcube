@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-11-25
+
 ### Fixed
 - **Unveränderte Sollwerte und Modi senden kein Funktelegramm mehr.** Automationen, die denselben Wert erneut setzen, erhöhten sonst den Duty Cycle des Cube (im Benchmark von 4 % auf 21 %).
 - **Temperatur- und Modus-Befehle prüfen jetzt das Funkbudget.** Ab 90 % Duty Cycle wird der Befehl abgelehnt, statt dass die Bibliothek bis zu 30 s retryt und den einen Worker blockiert.
 - **`climate.set_temperature` berücksichtigt jetzt `hvac_mode`.** `auto` behält das Wochenprogramm, `off` schaltet aus, `heat` setzt die übergebene Temperatur als MANUAL-Sollwert.
 - **Sollwerte werden auf halbe Grade gerundet** statt vom Cube abgeschnitten zu werden (21,4 °C → 21,5 °C).
+- **Der Wechsel auf `AUTO` funktioniert jetzt auch bei Wandthermostaten.** Die Bibliothek rief nach dem Senden `get_programmed_temp_at()` auf, das nur Heizkörperthermostate haben; der Service endete mit `AttributeError`, obwohl das Telegramm bereits gesendet war. Der Programmsollwert wird jetzt aus der eigenen, verlustfreien Wochentabelle gelesen.
+- **Discovery bricht ab, wenn Port 23272 belegt ist.** Der Cube antwortet nachweislich auf den Absenderport 23272; ein stiller Fallback auf einen ephemeralen Port ließ die Antwort unerreichbar und die Suche erfolglos.
+- **Das Wochenprogramm projiziert jetzt den Funkverbrauch aller Tage.** Sieben Tage bei 85 % Duty Cycle wurden bisher zugelassen, obwohl sie den Cube rechnerisch auf über 100 % bringen; dieselbe Projektion gilt jetzt für den einmaligen automatischen Nachversand.
+- **Eine beschädigte gespeicherte `M:`-Nachricht lässt den Poll nicht mehr scheitern.** Der Fallback auf den Cache ist jetzt geschützt und verwirft unlesbare Inhalte.
+- **Der Reboot-Button bleibt auch bei Socketfehlern still.** Die Socket-Erzeugung liegt jetzt im Fehlerbereich, und die Seriennummer wird wie bei der Discovery auf erlaubte Zeichen geprüft.
+- **Die Wochenplan-Karte korrigiert das Löschen der letzten Zone.** Die verbleibende letzte Zone endet wieder bei 24:00; außerdem wird der „Geändert"-Tooltip jetzt korrekt übersetzt statt als Platzhalter angezeigt.
+- **Zeitstempel und Staleness-Prüfung nutzen die injizierte Uhr**, sodass `L:`-Nachrichten auch in Tests und bei abweichender Systemzeit konsistent bewertet werden.
+- **Ein ungültiger Längenbyte in einer `L:`-Nachricht verwirft jetzt den Rest der Nachricht**, statt Folgedaten falsch zuzuordnen.
+- **Unerwartete Fehler beim Reconnect werden dem Nutzer als `unknown` gemeldet**, statt still verschluckt zu werden; nicht-numerische Temperaturwerte werden sauber als `bad_temperature` abgelehnt.
 
 ## [1.8.3] - 2026-11-24
 
