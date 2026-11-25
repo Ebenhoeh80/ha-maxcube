@@ -2,7 +2,7 @@
 
 This page records how the integration works, where its time goes, what can fail and how it
 recovers, what is checked automatically, and which options were rejected and why. Numbers are
-measured, with date and method. Last updated: 2026-11-25 (after the v1.8.5 verification and the live Cube investigation).
+measured, with date and method. Last updated: 2026-11-25 (after the v1.8.5 live verification and the stale-cache write guards).
 
 ## 1. Architecture and data flow
 
@@ -116,20 +116,20 @@ poll corrects it. No code change was made (P3 closed as documented behaviour).
 | Ruff (E, W, F, I, B, C4, UP, SIM, RET, PL, C901, ANN) | no findings | pass (tests are exempt from PLR2004, PLC0415 and ANN) |
 | MyPy with the real Home Assistant types | no errors | pass |
 | pytest, unit tests (Python 3.12, 3.13) | all pass | 175 passed, 2 xfailed (local recheck 2026-11-25) |
-| pytest in a real Home Assistant core (2025.3 and 2026.2) | all pass | 128 passed in each for 1.8.3; 145 passed locally for 1.8.5 (HA 2026.10.4, 2026-11-25) |
+| pytest in a real Home Assistant core (2025.3 and 2026.2) | all pass | 128 passed in each for 1.8.3; 147 passed locally for 1.8.6 (HA 2026.10.4, 2026-11-25) |
 | Coverage (both suites combined) | at least 95 % | 96.43 % |
 | hassfest, HACS validation | valid | pass |
 | xenon | absolute B, modules A, average A | pass |
 | CodeQL (security-and-quality) | no new alerts | pass |
 | Home Assistant Quality Scale | `quality_scale.yaml` | Gold; Platinum open (`async-dependency`, `strict-typing`) |
 
-Rechecked locally on 2026-11-25 for 1.8.5: Ruff clean, Xenon clean (`--max-absolute B`), MyPy clean
-with the real Home Assistant types, 175 unit tests passed (2 xfailed), 145 Home Assistant tests passed,
+Rechecked locally on 2026-11-25 for 1.8.6: Ruff clean, Xenon clean (`--max-absolute B`), MyPy clean
+with the real Home Assistant types, 175 unit tests passed (2 xfailed), 147 Home Assistant tests passed,
 `node --check` clean and `git diff --check` clean. CI additionally runs Hassfest and HACS `validate`,
-both green for 1.8.4 (1.8.5 pending).
+both green for 1.8.5 (1.8.6 pending).
 
 Not available locally: SonarQube, Semgrep, py-spy and Scalene. A live Cube test was possible on
-2026-11-25: the integration is loaded in HAOS with DEBUG logging, and raw `s:` telegrams were observed
+2026-11-25: the integration is loaded in HAOS (log level now `WARNING` after the investigation), and raw `s:` telegrams were observed
 in the log. It confirmed that RF flag `04` addresses a room and that five devices had wrong internal
 room IDs in their `C:` configuration, which coupled setpoint commands between rooms. Correcting those
 IDs with `0x22` is a Cube configuration change, not part of the integration code.
@@ -184,5 +184,21 @@ IDs with `0x22` is a Cube configuration change, not part of the integration code
   unaffected. Skipping the second read would require changing `_connect`, identity checking and
   duty-cycle freshness for a one-time saving — rejected as a riskier change than the cost it removes.
 - **Verification:** regression test `tests_ha/test_integration.py` counts one construction and two
-  reads after setup, plus one more after a refresh. Local HA tests cannot run here (no
-  `homeassistant` package); CI runs `tests_ha` against HA 2025.3 and 2026.2.
+  reads after setup, plus one more after a refresh. The note about local HA tests only applied to
+  the plain unit-test environment; with HA installed locally (2026.10.4) all `tests_ha` tests run.
+  CI runs `tests_ha` against HA 2025.3 and 2026.2.
+
+## 9. Closed: stale-cache no-change guards (2026-11-25)
+
+- **Live observation:** after a `climate.set_temperature` the new target became visible in HA only
+  at the next 60 s poll. A second, different request sent inside that window could be dropped by the
+  no-change guard: it compared the request with the last poll's snapshot, which still held the old
+  value. The same applied to `_set_mode` after a setpoint had sent `MANUAL` in the combined telegram.
+- **Fix:** the thermostat remembers the last sent temperature and mode until a coordinator update
+  replaces the snapshot. Both the temperature and the mode guard compare against that pending value
+  first; the snapshot is only used when nothing is pending. The pending temperature is also used for
+  the reported target, so the UI shows a setpoint immediately instead of waiting for the poll.
+- **Radio cost:** unchanged for normal use. Repeating an identical request is still suppressed, and
+  no extra telegram is sent unless the caller actually asks for a different value.
+- **Verification:** two regression tests in `tests_ha/test_climate_temperature.py` mock
+  `async_request_refresh` to simulate the missing poll; both failed before the fix and pass after it.

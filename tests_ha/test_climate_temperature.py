@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.components.climate import HVACMode
@@ -17,6 +17,7 @@ from maxcube.device import (
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import DOMAIN
+from custom_components.maxcube_local.coordinator import MaxCubeCoordinator
 from custom_components.maxcube_local.schedule import ScheduleError
 
 from .conftest import RADIATOR, FakeCube
@@ -55,6 +56,53 @@ async def test_an_unchanged_setpoint_does_not_use_radio(
 
     assert len(cube.temperature_modes) == commands
     assert cube.updates == updates
+
+
+async def test_a_second_setpoint_before_the_poll_is_not_lost(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """A stale poll cache must not suppress a different setpoint sent moments later.
+
+    The Cube acknowledges a write in seconds while the next HA poll can be a minute away.
+    Sending A and then B inside that window must leave B on the device, not A.
+    """
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass)
+
+    # Simulate the poll that has not happened yet after the first write.
+    with patch.object(MaxCubeCoordinator, "async_request_refresh", new_callable=AsyncMock):
+        await _set_temperature(hass, entity_id, temperature=22.0)
+        # The UI must not wait for the next poll to show what was just sent.
+        assert hass.states.get(entity_id).attributes["temperature"] == 22.0
+        await _set_temperature(hass, entity_id, temperature=21.0)  # still the cached value
+
+    assert cube.temperature_modes[-2:] == [
+        (RADIATOR, 22.0, MAX_DEVICE_MODE_MANUAL),
+        (RADIATOR, 21.0, MAX_DEVICE_MODE_MANUAL),
+    ]
+
+
+async def test_a_mode_change_before_the_poll_is_not_lost(
+    hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
+) -> None:
+    """A setpoint's MANUAL write must not hide a following mode request from the guard."""
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass)
+
+    await hass.services.async_call(
+        "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "auto"}, blocking=True
+    )
+    await config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    with patch.object(MaxCubeCoordinator, "async_request_refresh", new_callable=AsyncMock):
+        await _set_temperature(hass, entity_id, temperature=22.0)
+        await hass.services.async_call(
+            "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "auto"}, blocking=True
+        )
+        await hass.async_block_till_done()
+
+    assert cube.temperature_modes[-1] == (RADIATOR, 0.0, MAX_DEVICE_MODE_AUTOMATIC)
 
 
 async def test_an_unchanged_mode_does_not_use_radio(
