@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-11-25
+
+### Fixed
+- **Wandthermostate zeigen keinen erfundenen Status „Leerlauf" mehr.** `hvac_action` hat fehlendes Ventilfeedback (`valve_position = None`) wie ein geschlossenes Ventil behandelt. Ohne Stellrückmeldung wird jetzt gar keine Aktion gemeldet; `Aus` bleibt weiterhin `off`, und Heizkörper mit bekanntem Ventil behalten `heating`/`idle`.
+- **Ein expliziter Sollwert bleibt auch bei `hvac_mode: auto` erhalten.** Seit 1.8.4 hat die Kombination aus Temperatur und `auto` die Temperatur verworfen und auf den Wochenprogramm-Sollwert zurückgesetzt – das konnte Räume ungewollt herunterregeln. Ein reiner Moduswechsel auf `Auto` nutzt weiterhin das Wochenprogramm; `off` und `heat` sind unverändert.
+- **Ursache der beobachteten Sollwert-Kopplung zwischen Zimmern identifiziert und live behoben.** Fünf von neun MAX!-Geräten hatten abweichende geräteinterne Raumcodes in der `C:`-Konfiguration; Sollwertbefehle mit RF-Flag `04` (Gruppe/Raum) erreichten dadurch falsche Zimmer. Die Raumadressen wurden per `0x22` korrigiert und mit Isolationstests verifiziert. Das ist eine Konfigurationsmaßnahme am Cube und keine Code-Änderung dieser Version: Die Integration liest die maßgebliche Raum-ID unverändert aus der `M:`-Nachricht und behält die gruppenadressierten Befehle bei (ein Telegram für alle Geräte eines Raums).
+
 ## [1.8.4] - 2026-11-25
 
 ### Fixed
