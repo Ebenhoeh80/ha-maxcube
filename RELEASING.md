@@ -1,5 +1,7 @@
 # Releasing eQ-3 MAX! Cube
 
+[English](RELEASING.md) | [Deutsch](RELEASING.de.md)
+
 How a release is made, step by step, so it does not depend on anyone's memory. Versions follow
 [Semantic Versioning](https://semver.org/): a breaking change raises the major version, a new
 feature the minor version, a fix the patch version.
@@ -7,8 +9,9 @@ feature the minor version, a fix the patch version.
 ## 1. Prepare
 
 1. Check that everything meant for the release is merged to `main` and CI is green.
-2. In `CHANGELOG.md`, rename `[Unreleased]` to `[x.y.z] - YYYY-MM-DD` and start a new empty
-   `[Unreleased]` section above it. The section's text becomes the release notes.
+2. In both `CHANGELOG.md` and `CHANGELOG.en.md`, rename `[Unreleased]` to
+   `[x.y.z] - YYYY-MM-DD` and start a new empty `[Unreleased]` section above it. Both sections
+   become the bilingual release notes; a release must not ship with one language missing.
 3. Set the new version in `custom_components/maxcube_local/manifest.json`.
 
 ## 2. Check locally
@@ -45,6 +48,9 @@ The tag starts `.github/workflows/release-zip.yml`, which calls the shared workf
 manifest version, builds `maxcube_local.zip` (integration files at the zip root, as HACS expects with
 `zip_release`), and creates or updates the GitHub release with the matching changelog section and
 the zip attached. If the tag and the version differ, the workflow fails and nothing is published.
+A second job then runs `scripts/release_notes.py` and replaces the release body with the German
+**and** English changelog sections (the shared workflow only publishes German). A missing English
+section fails that job instead of silently publishing an incomplete translation.
 
 ## 6. Verify the release
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -50,6 +52,31 @@ def test_engineering_and_runbook_docs_exist_in_both_languages() -> None:
 def test_each_readme_links_its_language_runbook() -> None:
     assert "docs/RUNBOOK.md" in _read(ROOT / "README.md")
     assert "docs/de/RUNBOOK.md" in _read(ROOT / "README.de.md")
+
+
+def test_releasing_docs_exist_in_both_languages() -> None:
+    english = _read(ROOT / "RELEASING.md")
+    german = _read(ROOT / "RELEASING.de.md")
+    assert "[Deutsch](RELEASING.de.md)" in english
+    assert "[English](RELEASING.md)" in german
+    # Both languages must state that both changelogs are part of a release.
+    assert "CHANGELOG.en.md" in english
+    assert "CHANGELOG.en.md" in german
+
+
+def test_release_notes_script_emits_both_languages(monkeypatch: pytest.MonkeyPatch) -> None:
+    version = json.loads(_read(INTEGRATION / "manifest.json"))["version"]
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{version}")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "release_notes.py")],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "## Deutsch" in result.stdout
+    assert "## English" in result.stdout
+    assert f"## [{version}]" in result.stdout
 
 
 def test_the_admin_action_has_an_icon() -> None:
