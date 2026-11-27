@@ -10,27 +10,32 @@ geändert.
 Warte **mindestens 60 Sekunden** zwischen Befehlen, die verschiedene Räume
 ändern. Sechs Raumwechsel im Abstand von 15 Sekunden führten auf einem System zu
 Übersprechen, ein einzelner Wechsel nicht. Die Ursache ist unbekannt; daher ist
-dies eine Betriebsregel und kein behaupteter Fix. Die Integration queuesweder
-Befehle noch sendet sie erneut — die Warteschlange gehört dem Cube.
+dies eine Betriebsregel und kein behaupteter Fix. Die Integration reiht weder
+Befehle noch sendet sie erneut — die Warteschlange gehört dem Cube, der aber
+keine Länge darüber meldet.
 
 ## Erst beobachten, dann vermuten
 
 1. Lade unter **Diagnose** des Integrationseintrags ⋮ → „Diagnostics herunterladen“.
 2. Prüfe `cube.queue_status`, `cube.pending_telegrams`,
-   `cube.rejected_commands` und `telegram_observation`.
+   `cube.rejected_commands` und `telegram_observation`. Die `S:`-Antwort des
+   Cube lautet `S:<Funkauslastung hex>,<Ergebnis>,<freie Plätze hex>` und
+   enthält **keine** Warteschlangenlänge.
    - `queue_status.status = 1`: der Cube hat einen Befehl **verworfen**. Die
      Integration schreibt in diesem Fall eine Warnung.
-   - `queued_telegrams`: noch wartende Telegramme im Cube.
+   - `queue_status.duty_cycle = 100`: das Funkbudget ist aufgebraucht, Befehle
+     werden abgelehnt.
+   - `queue_status.free_memory_slots`: vom Cube gemeldete freie Speicherplätze.
    - `pending_telegrams`: von Home Assistant gesendete Telegramme, für die noch
-     keine `L:`-Antwort kam. Das ist **kein** Beweis, dass ein Sollwert angekommen ist.
-   - `duty_cycle = 100`: das Funkbudget ist aufgebraucht, Befehle werden abgelehnt.
+     keine `L:`-Antwort kam. Das ist **keine** Warteschlangenlänge des Cube
+     und **kein** Beweis, dass ein Sollwert angekommen ist.
 3. Erst danach entscheiden: verworfener Befehl, überlastetes Funk oder falsches Zimmer.
 
 ## `C:` mit `M:` nach Neustart oder Programmwechsel vergleichen
 
 Jedes Thermostat speichert seinen Raumcode in der `C:`-Antwort; der Cube listet
 die Räume in der `M:`-Antwort. Das sind zwei verschiedene Quellen. Auf einem
-System wichen neun von fünf Geräten ab; eine Korrektur per `0x22` war dort
+System wichen fünf von neun Geräten ab; eine Korrektur per `0x22` war dort
 erfolgreich, ihre Stabilität nach Cube-Neustart oder Wochenprogrammwechsel ist
 **nicht verifiziert**.
 

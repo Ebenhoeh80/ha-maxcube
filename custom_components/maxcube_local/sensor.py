@@ -49,8 +49,6 @@ async def async_setup_entry(
             entities.append(MaxCubeStatusSensor(coordinator, "duty_cycle", PERCENTAGE))
         if snapshot.free_memory_slots is not None:
             entities.append(MaxCubeStatusSensor(coordinator, "free_memory_slots", None))
-        if snapshot.queued_telegrams is not None:
-            entities.append(MaxCubeStatusSensor(coordinator, "queued_telegrams", None))
     async_add_entities(entities)
 
 
@@ -101,7 +99,9 @@ class MaxCubeStatusSensor(CoordinatorEntity[MaxCubeCoordinator], SensorEntity):
     """A status value of the Cube itself (duty cycle, free memory slots), read at every poll.
 
     The Cube may only use a limited share of the radio time. At a duty cycle of 100 % it sends no
-    radio commands for about an hour, so watch this value when you change many settings.
+    radio commands for about an hour, so watch this value when you change many settings.  The
+    ``S:`` answer has no queue-length field; locally pending telegrams are exposed as an attribute
+    instead of a separate sensor.
     """
 
     _attr_has_entity_name = True
@@ -137,7 +137,7 @@ class MaxCubeStatusSensor(CoordinatorEntity[MaxCubeCoordinator], SensorEntity):
         frame; a rejected command was discarded by the Cube (``S:`` status 1).
         Neither is a promise that a setting has reached the thermostat.
         """
-        if self._key not in ("duty_cycle", "free_memory_slots", "queued_telegrams"):
+        if self._key not in ("duty_cycle", "free_memory_slots"):
             return {}
         data = self.coordinator.data
         return {

@@ -100,7 +100,8 @@ def test_all_language_files_have_the_same_sensor_keys() -> None:
     assert english == sensors("strings.json")
 
 
-def test_the_queued_telegram_sensor_is_translated_everywhere() -> None:
+def test_no_sensor_claims_a_cube_queue_length() -> None:
+    """The S message has no queue field; a translated entity must not claim one."""
     for name in ("strings.json", "translations/en.json", "translations/de.json"):
         data = json.loads(_read(INTEGRATION / name))
-        assert "queued_telegrams" in data["entity"]["sensor"], name
+        assert "queued_telegrams" not in data["entity"]["sensor"], name

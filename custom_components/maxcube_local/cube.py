@@ -177,17 +177,16 @@ class MaxCubeWithStatus(MaxCube):
         super()._MaxCube__parse_responses(messages)
 
     def _parse_s_message(self, argument: str) -> None:
-        """Record the queue state of an ``S:`` line and warn when a command was discarded."""
+        """Record the values of an ``S:`` line and warn when a command was discarded."""
         parsed = parse_s_status(f"S:{argument}")
         if parsed is None:
             return
-        status, duty, free, queued = parsed
-        if self.telegram_log.record_status(status, duty, queued, free_slots=free):
+        status, duty, free = parsed
+        if self.telegram_log.record_status(status, duty, free_slots=free):
             _LOGGER.warning(
-                "MAX! Cube discarded a radio command (duty cycle %d%%, queue %d, free slots %d). "
+                "MAX! Cube discarded a radio command (duty cycle %d%%, free slots %d). "
                 "Wait at least 60 seconds between changes to several rooms.",
                 duty,
-                queued,
                 free,
             )
 

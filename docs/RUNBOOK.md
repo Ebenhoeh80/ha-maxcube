@@ -16,14 +16,16 @@ the Cube owns its queue.
 
 1. Download **Diagnostics** for the integration entry (⋮ → Download diagnostics).
 2. Look at `cube.queue_status`, `cube.pending_telegrams`,
-   `cube.rejected_commands` and `telegram_observation`.
+   `cube.rejected_commands` and `telegram_observation`. The Cube's `S:` answer is
+   `S:<duty hex>,<result>,<free slots hex>`; it has **no** queue-length field.
    - `queue_status.status = 1`: the Cube **discarded** a command. The integration
      logs a warning in this case.
-   - `queued_telegrams`: frames still waiting in the Cube.
+   - `queue_status.duty_cycle = 100`: the radio budget is exhausted; commands
+     are refused.
+   - `queue_status.free_memory_slots`: free slots reported by the Cube.
    - `pending_telegrams`: telegrams sent by Home Assistant that have not yet
-     been acknowledged by an `L:` answer. This is **not** proof that a setting
-     arrived at a thermostat.
-   - `duty_cycle = 100`: the radio budget is exhausted; commands are refused.
+     been acknowledged by an `L:` answer. This is **not** a Cube queue count
+     and **not** proof that a setting arrived at a thermostat.
 3. Only then decide whether this was a rejected command, a busy radio or a
    wrong room.
 

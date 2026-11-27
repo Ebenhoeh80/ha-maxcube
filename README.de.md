@@ -240,9 +240,9 @@ Home Assistant werden sofort gesendet und bei der nächsten Abfrage zurückgeles
 
 **Betriebsregel:** Warte mindestens 60 Sekunden zwischen Befehlen an verschiedene Räume.
 Funkaufträge sind jetzt beobachtbar: die Diagnose-Sensoren und der heruntergeladene
-Diagnosebericht zeigen den `S:`-Warteschlangenstatus, wartende Telegramme und verworfene
-Befehle. Im [Runbook](docs/de/RUNBOOK.md) steht, wie `C:`- und `M:`-Raumcodes verglichen
-werden und welche Fragen weiterhin offen sind.
+Diagnosebericht zeigen das `S:`-Ergebnis, Funkauslastung, freie Plätze und lokal wartende
+Telegramme. Der Cube meldet keine Warteschlangenlänge. Im [Runbook](docs/de/RUNBOOK.md) steht,
+wie `C:`- und `M:`-Raumcodes verglichen werden und welche Fragen weiterhin offen sind.
 
 ## 💡 Anwendungsbeispiele
 

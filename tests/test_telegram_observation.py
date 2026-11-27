@@ -81,17 +81,19 @@ def test_an_s_message_with_status_one_is_recorded_and_warned(
     instance = _cube()
     record = instance.telegram_log.record_sent(TELEGRAM)
 
-    instance._parse_s_message("01,32,0F,02")
+    # Bouni, S-Message.md: duty, command result, free slots.
+    instance._parse_s_message("32,01,0F")
 
     assert record.status == "rejected"
     assert instance.telegram_log.queue_status["status"] == 1
-    assert instance.telegram_log.queue_status["queued_telegrams"] == 2
+    assert instance.telegram_log.queue_status["duty_cycle"] == 50
+    assert instance.telegram_log.queue_status["free_memory_slots"] == 15
     assert "discarded a radio command" in caplog.text
 
 
 def test_h_status_updates_the_queue_view() -> None:
     instance = _cube()
-    instance.telegram_log.record_status(0, 90, 3, free_slots=4)
+    instance.telegram_log.record_status(0, 90, free_slots=4)
     instance.telegram_log.record_h_status(12, 15)
     assert instance.telegram_log.queue_status["duty_cycle"] == 12
     assert instance.telegram_log.queue_status["free_memory_slots"] == 15

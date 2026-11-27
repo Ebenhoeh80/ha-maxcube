@@ -49,12 +49,12 @@ async def test_diagnostics_show_queue_and_connection_observation(
 ) -> None:
     """Queue, backoff and telegram counters are the values needed for a support case."""
     await _setup(hass, config_entry)
-    cube.telegram_log.record_status(1, 50, 2, free_slots=15)
+    cube.telegram_log.record_status(1, 50, free_slots=15)
     report = await async_get_config_entry_diagnostics(hass, config_entry)
 
     observation = report["telegram_observation"]
     assert observation["queue_status"]["status"] == 1
-    assert observation["queue_status"]["queued_telegrams"] == 2
+    assert "queued_telegrams" not in observation["queue_status"]
     assert observation["queue_status"]["free_memory_slots"] == 15
     assert observation["counts"]["sent"] == 0
     assert observation["rejected_count"] == 1

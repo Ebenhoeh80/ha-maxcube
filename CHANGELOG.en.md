@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-27
+
+### Fixed
+- **The `S:` parser reads real Cube answers again.** The protocol reference defines `S:<duty hex>,<result>,<free slots hex>` with three fields. Version 1.9.0 expected four fields in the wrong order and therefore discarded every real answer: `cube_status` stayed empty and the warning for a discarded command could never fire. A local `S:26,0,31` is now read as 38 % duty cycle, result 0 and 49 free slots; `S:FF,1,00` as 100 %, discarded and 0 slots.
+- **The "Queued telegrams" sensor was removed.** It claimed a queue length that the protocol does not report. `pending_telegrams` remains an observation of telegrams sent locally and not yet acknowledged by an `L:` answer in the diagnostic sensors and diagnostics download; it is still not proof of arrival at a thermostat. The runbook now describes the correct format and the meaning of each field.
+
 ## [1.9.0] - 2026-11-27
 
 > Note: pairing is still **not** supported and is not part of this release.
