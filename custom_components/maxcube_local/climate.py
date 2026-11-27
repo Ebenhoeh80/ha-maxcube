@@ -148,7 +148,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     if _NATIVE_TEMPERATURES:
         _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     else:
-        _attr_temperature_unit = UnitOfTemperature.CELSIUS  # type: ignore[misc]  (HA marks this Final but entities must set it)
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS  # type: ignore[misc]  # HA marks this Final, entities must set it
     # The Cube reports the measured temperature in 0.1 °C; setpoints are 0.5 °C.
     _attr_precision = PRECISION_TENTHS
     _attr_target_temperature_step = PRECISION_HALVES
@@ -252,12 +252,12 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     else:
 
         @property
-        def current_temperature(self) -> float | None:  # type: ignore[misc]  (HA marks this Final but climate entities override it)
+        def current_temperature(self) -> float | None:  # type: ignore[misc]  # HA marks this Final, entities override it
             """Return the measured temperature."""
             return self._measured_temperature()
 
         @property
-        def target_temperature(self) -> float | None:  # type: ignore[misc]  (HA marks this Final but climate entities override it)
+        def target_temperature(self) -> float | None:  # type: ignore[misc]  # HA marks this Final, entities override it
             """Return the target temperature."""
             return self._target_temperature()
 
