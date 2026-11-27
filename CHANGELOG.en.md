@@ -1,0 +1,381 @@
+> English translation of CHANGELOG.md. Machine-created; native-speaker review pending.
+
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.9.0] - 2026-11-27
+
+> Note: pairing is still **not** supported and is not part of this release.
+
+### Added
+- **Radio commands are observable.** Sent telegrams are correlated with the devices' `L:` answers; the Cube's `S:` status (1 = discarded), pending telegrams, free slots and duty cycle appear as attributes of the diagnostic sensors and in the diagnostics download. A discarded command logs a warning with the reminder to wait at least 60 seconds between room changes. This is an observation aid, not a root-cause fix for the live setpoint cross-talk.
+- **New "Queued telegrams" sensor** shows the Cube's current queue; failed connection attempts are throttled with backoff and recorded in diagnostics.
+- **Reboot as an admin action.** It uses the serial read from the Cube and is available to administrators only; factory reset stays out.
+- **Runbook (DE/EN)** for the `C:`↔`M:` comparison and the 60 s rule between room changes.
+- **Typed async client building block** with line framing, timeouts and a cancellation-safe lock; it is not active in the coordinator yet.
+
+### Changed
+- Actions are registered centrally in `services.py`; entity actions use the official helper on HA 2025.10+ while older cores keep the platform route. The test framework uses `pytest-homeassistant`, and the permanently blocking minimum-HA job now checks the pure logic on the oldest supported Python version.
+- The `M:` parser validates the index/total envelope and only replaces the remembered configuration with a complete message.
+- Quality gates: a per-module coverage floor with reasoned exemptions for socket paths, `mypy --strict` for the pure logic modules, and diagnostics/release consistency checks including DE/EN parity. `strict-typing` and `async-dependency` remain documented Platinum goals.
+
+## [1.8.6] - 2026-11-25
+
+### Fixed
+- **A second setpoint within one poll interval is no longer lost.** The Cube confirms a telegram within seconds, but the next Home Assistant poll may take a minute. The "no change" check previously compared only the poll cache: if a new value was set and the old value was requested again within that window, the second telegram was suppressed and the Cube stayed at the first value. Setpoint and mode are now marked as "sent" until the next confirmation and checked against that value.
+- **A direct mode change after a setpoint is no longer swallowed.** A setpoint sends mode `MANUAL` together with the temperature. A request for `Auto` immediately afterwards still saw `Auto` in the stale cache and was discarded; the pending mode now applies here as well.
+- **The display updates the setpoint immediately after sending.** Previously the new value only became visible in Home Assistant after the next poll (up to 60 s).
+
+## [1.8.5] - 2026-11-25
+
+### Fixed
+- **Wall thermostats no longer show an invented "Idle" status.** `hvac_action` treated missing valve feedback (`valve_position = None`) like a closed valve. Without feedback no action is reported now; `Aus` remains `off`, and radiators with a known valve keep `heating`/`idle`.
+- **An explicit setpoint is now preserved even with `hvac_mode: auto`.** Since 1.8.4 the combination of a temperature and `auto` discarded the temperature and reset it to the weekly programme setpoint – which could unintentionally lower the temperature in rooms. A pure mode change to `Auto` still uses the weekly programme; `off` and `heat` are unchanged.
+- **Cause of the observed setpoint coupling between rooms identified and fixed live.** Five of nine MAX! devices had deviating device-internal room codes in the `C:` configuration; setpoint commands with RF flag `04` (group/room) therefore reached the wrong rooms. The room addresses were corrected via `0x22` and verified with isolation tests. This is a configuration measure on the Cube and not a code change in this version: the integration reads the authoritative room ID from the `M:` message unchanged and keeps the group-addressed commands (one telegram for all devices of a room).
+
+## [1.8.4] - 2026-11-25
+
+### Fixed
+- **Unchanged setpoints and modes no longer send a radio telegram.** Automations that set the same value again increased the Cube's duty cycle (from 4 % to 21 % in the benchmark).
+- **Temperature and mode commands now check the radio budget.** From 90 % duty cycle the command is rejected instead of the library retrying for up to 30 s and blocking the one worker.
+- **`climate.set_temperature` now respects `hvac_mode`.** `auto` keeps the weekly programme, `off` switches off, `heat` sets the given temperature as a MANUAL setpoint.
+- **Setpoints are rounded to half degrees** instead of being truncated by the Cube (21.4 °C → 21.5 °C).
+- **Switching to `AUTO` now also works for wall thermostats.** After sending, the library called `get_programmed_temp_at()`, which only radiator thermostats have; the service ended with `AttributeError` even though the telegram had already been sent. The programme setpoint is now read from the integration's own lossless week table.
+- **Discovery aborts if port 23272 is occupied.** The Cube demonstrably replies to the sender port 23272; a silent fallback to an ephemeral port made the reply unreachable and the search unsuccessful.
+- **The weekly programme now projects the radio usage of all days.** Seven days at 85 % duty cycle used to be allowed even though they would mathematically bring the Cube above 100 %; the same projection now applies to the one-off automatic resend.
+- **A corrupted stored `M:` message no longer makes the poll fail.** The fallback to the cache is now protected and discards unreadable content.
+- **The reboot button stays silent even on socket errors.** Socket creation is now inside the error handling, and the serial number is checked for allowed characters as in discovery.
+- **The weekly schedule card fixes deletion of the last zone.** The remaining last zone ends at 24:00 again; the "Changed" tooltip is now translated correctly instead of showing a placeholder.
+- **Timestamps and staleness checks use the injected clock**, so `L:` messages are evaluated consistently in tests and with a deviating system time.
+- **An invalid length byte in an `L:` message now discards the rest of the message** instead of misassigning subsequent data.
+- **Unexpected errors during reconnect are reported to the user as `unknown`** instead of being silently swallowed; non-numeric temperature values are cleanly rejected as `bad_temperature`.
+
+## [1.8.3] - 2026-11-24
+
+### Fixed
+- **"Off" and target temperatures now persist.** The Cube accepts a target temperature only together with a mode. Previously, when setting `Aus`, `Heizen`, a target temperature or a temperature-based preset, the old mode was kept: in the weekly programme (`AUTO`) the value disappeared again at the next poll and the display stayed on "Auto". All these commands now send a combined `set_temperature_mode` command with `MANUAL`. `Aus` is therefore `MANUAL` + 4.5 °C and is displayed accordingly.
+- **"Heating" restores the last real setpoint** instead of the 4.5 °C the Cube reports in the off state. If no own value is known, the current programme setpoint (otherwise the comfort setpoint) is used.
+- The climate tiles in the heating dashboard now show a mode switcher (`climate-hvac-modes`) so Auto / Heating / Off can be operated directly from the tile.
+
+## [1.8.2] - 2026-11-23
+
+### Fixed
+- A cancelled Home Assistant task can no longer let two Cube calls overlap. Polls, commands, writes and snapshots now share one dedicated worker thread, so a cancelled task cannot release a lock while its socket call is still running. A regression test proves that the next call waits for the cancelled one to finish.
+- A discovered address is saved only after the device at that address confirms the expected serial. Discovery replies are unauthenticated; a candidate without a serial is rejected, and a flow that would redirect an existing entry checks the claimed serial at the new host. A forged reply can no longer move an entry permanently. This is a mix-up guard, not authentication.
+- A window contact with no status bit in its telegram reports `unknown` instead of a guessed `closed`.
+- Impossible times and temperatures in a weekly programme are discarded instead of appearing as setpoints or as the current target temperature; a damaged programme is refused on write.
+- Serial numbers were removed from log messages; identity errors are now `HomeAssistantError` and no longer reported as connection failures.
+- Shutdown closes the worker without blocking the event loop and tolerates repeated calls, a failing disconnect and a refresh that races the unload.
+- A device renamed on the Cube gets the new name in Home Assistant at the next poll; a name the user chose in Home Assistant is never overwritten.
+
+## [1.8.1] - 2026-11-22
+
+### Fixed
+- A weekly programme that the Cube has not taken is resent once. After a write the Cube often still shows the old
+  programme until the thermostat confirms it. That check now repeats the write once (never above the 90 % radio limit);
+  its own follow-up check only warns. A new write by the user re-enables the single retry. No endless retry loop.
+- A defensive release of the Cube's client slot on shutdown. Every poll and command already closes its own short
+  connection, so the extra `disconnect` is normally a no-op. It waits for an in-flight call to finish before releasing
+  a socket that may still be held; it cannot free the port earlier than that.
+- A weekly-programme check already in flight stops at shutdown. Guards prevent a retry write and a new verification
+  timer from being armed while the entry is going away.
+
+## [1.8.0] - 2026-11-22
+
+### Added
+- Two buttons per wall thermostat, `Show room temperature` and `Show setpoint`, set what its display shows. Each press sends one radio telegram. It is refused, and nothing is sent, when the Cube is at 90 % of its radio time. The current setting cannot be read back from the Cube, so the integration shows no state for it. The telegram is not verified on a real wall thermostat yet (taken from the protocol description and the official software).
+
+## [1.7.1] - 2026-11-22
+
+### Fixed
+- A Cube that sends its rooms and devices as an empty `M:` line no longer loses its devices after a restart. The last readable list is saved and used; a repair hint appears when the Cube sends no readable list for three polls in a row and goes away with the next readable one.
+
+## [1.7.0] - 2026-11-21
+
+### Added
+- `maxcube_local.set_schedule` takes `by_day`: its own periods for each day, instead of one list of periods for all the
+  days in `days`. The old form (`days` and `periods`) works as before.
+- Service `maxcube_local.copy_schedule` copies the weekly programme of a radiator thermostat to other radiator
+  thermostats of the same Cube, for all days or for the days given. Only the days that differ are written. The radio
+  time is checked before the first telegram (about 2.8 % per telegram plus the current duty cycle); the request is
+  refused, and nothing is sent, if the Cube would reach 90 %. The response gives the result per thermostat and day.
+
+### Changed
+- Entities read an immutable snapshot taken after each poll instead of the library's mutable objects.
+
+## [1.6.1] - 2026-11-21
+
+### Changed
+- The minimum Home Assistant version is now 2025.3 because the integration imports `AddConfigEntryEntitiesCallback`, which Home Assistant added in 2025.3.
+- Tests: a fake Cube (synthetic frames) for tests without hardware.
+
+### Fixed
+- A short (5-byte) or window contact (6-byte) entry as the last entry of the Cube's L message no longer drops the link status of all devices.
+- The values of a device with a short or window entry are no longer read from the bytes of the next entry.
+
+## [1.6.0] - 2026-11-21
+
+### Added
+- Lovelace card for the weekly heating programme, contributed by @helpmeifyoucan (#25). It is served by the
+  integration itself (no resource to add), lists radiator thermostats only, sends only changed days and asks for
+  confirmation before many radio telegrams.
+
+### Changed
+- The manifest now lists `frontend` and `http` as dependencies (both are part of every normal Home Assistant
+  setup); they are needed to serve and load the card.
+
+## [1.5.1] - 2026-11-21
+
+### Changed
+- **The four status sensors of a device are named after what they report, not after the fault.** "Device error" is now
+  "Device status", "No data received" is "Data reception", "Not initialized" is "Setup" and "Radio fault" is
+  "Radio link" (German: Gerätezustand, Datenempfang, Einrichtung, Funkverbindung). They still show "OK" or "Problem";
+  what they report and their entity ids do not change.
+
+### Fixed
+- **A low-battery report is held for 15 minutes after the Cube stops sending it.** The Cube reports that flag unevenly (on a
+  real thermostat it came and went every few minutes for hours), so the sensor and the repair hint flapped, and an
+  automation waiting for "on for 30 minutes" could not fire.
+- The repair hint for a device error says that after a battery change it can take a few hours until the Cube has set the
+  thermostat up again.
+
+## [1.5.0] - 2026-11-21
+
+### Added
+- **Repair hints for the Cube itself:** one when the Cube has not answered for more than six hours, and one
+  when its radio duty cycle stays at 90 % or more for ten minutes (it goes away below 80 %; at 100 % the Cube stops
+  sending commands for about an hour). Both clear by themselves.
+- **Translated names for the thermostat presets** (none, boost, comfort, eco, away, on) in English and German.
+- `SECURITY.md` with the supported versions, the threat model (the MAX! protocol has no authentication; use the
+  Cube in a trusted network only) and private reporting through GitHub Security Advisories.
+
+### Changed
+- **A command that cannot reach the Cube fails with a clear, translated message** instead of a raw network error
+  (target temperature, mode and preset, and programme writes); a command the Cube does not accept (a false answer,
+  for example when its radio time is used up) is reported the same way. This makes the Silver rule
+  `action-exceptions` of the quality scale true.
+- **Discovery** ignores a datagram whose serial number is not ten capital letters or digits, and the `until` time of
+  the `set_schedule` service must be plain `H:MM`/`HH:MM` with ASCII digits.
+- A programme write keeps one pending check per device instead of registering a new callback for every write; the
+  two locks of the coordinator are documented (they cannot be merged).
+- The diagnostics redact the entry title and unique id as well (they are not part of the report today); a test searches
+  the whole report for addresses, serial numbers and names.
+- CI: read-only token permissions, third-party actions (and the release workflow of `Ebenhoeh80/.github`) pinned to
+  commit SHAs, ruff rules RET, PL, C901 and ANN.
+
+## [1.4.2] - 2026-11-20
+
+### Changed
+- **The entry title shows the serial number in parentheses:** "MAX! Cube (JEQ0355273)". An entry with a
+  generated title is renamed at the next start; a title you chose stays.
+- Clearer names: the reboot button is "Restart" (it appears under the Cube device), the error sensor of a device is
+  "Device error" ("Gerätefehler").
+
+## [1.4.1] - 2026-11-20
+
+### Fixed
+- The reboot button had no name (it showed up as just "MAX! Cube"); it is called "Restart Cube" / "Cube neu starten" now.
+  The button stays disabled by default.
+
+## [1.4.0] - 2026-11-20
+
+### Added
+- **Home Assistant Integration Quality Scale: Gold** (`quality_scale.yaml`), `icons.json`,
+  `PARALLEL_UPDATES`, descriptions for all dialog fields and README sections (configuration, supported
+  devices and functions, data updates, use cases, troubleshooting, removal, known limitations).
+- **Reconfigure flow:** change the Cube's address without removing the entry (only the same Cube, by its
+  serial number, is accepted; identity and title stay).
+- **Repair hints** for a low battery and a device error, and a **diagnostics download** with addresses,
+  serial numbers and names removed; the diagnostics also show how many polls ran, failed and how long the last took.
+- **Devices paired later get their entities at the next poll;** devices that left the Cube are removed after
+  the next reload or restart and may be deleted in the UI.
+- **Link-status diagnostics and a reboot button**, contributed by @helpmeifyoucan (pull request #3, rebased
+  onto 1.3.3 in #17): the Cube's per-device flags (Error, Link error, Not initialized, No data received) as
+  diagnostic sensors with the raw flag bytes as an attribute, and a button that reboots the Cube. "Radio fault",
+  "Not initialized" and the reboot button are disabled by default.
+- CI: ruff, mypy with the real Home Assistant types, xenon, CodeQL, 95 % coverage gate;
+  [`docs/ENGINEERING.md`](docs/ENGINEERING.md) documents architecture, failure modes, measurements and decisions.
+
+### Fixed
+- **Poll and commands no longer overlap on the Cube's single connection** (a test showed two threads in a
+  Cube call at once; calls are serialised now).
+- A poll refused or reset by the Cube (for example while the MAX! app holds the connection) is repeated once.
+- Read-backs after commands are merged for 2 s instead of 10 s.
+- The reboot button no longer raises on a network error.
+
+## [1.3.3] - 2026-11-20
+
+### Changed
+- **A Cube is identified by its serial number, not by its address.** The entry's unique id and its title are now
+  the serial number (`MAX! Cube JEQ0355273`); before, both contained the address, which changed with every new
+  address and showed a wrong title. Existing entries are migrated at the next start (a title you chose stays);
+  devices, entities, areas and history are not touched. See [`docs/IDENTITY.md`](docs/IDENTITY.md).
+- **Discovery:** Home Assistant now finds a Cube by its DHCP request (hardware address prefix of eQ-3): the first
+  Cube appears under *Discovered*, and a known Cube that got a new address is followed. After startup the integration
+  also scans once for Cubes it does not know or whose address changed.
+- **One Cube, one entry:** a second entry for a Cube that already has one stops with a clear message instead of
+  creating every device twice.
+- **The Cube that answers must be the Cube of the entry:** a different Cube at the saved address is no longer taken
+  over; the right one is looked up by its serial number.
+- The entry reloads (once) when the options or the address change, scheduled by its update listener.
+
+### Fixed
+- The connection test of the setup dialog did not close its connection, so the Cube stayed occupied until it was
+  cleaned up; an unexpected error in the dialog is shown as "unknown".
+- A failed setup because the Cube is off logs one line instead of a full error trace.
+- The broadcast search no longer raises when the machine has no usable network interface.
+
+## [1.3.2] - 2026-11-20
+
+### Fixed
+- **The Cube is found again after it was off or restarted.** A Cube that has no DHCP lease yet
+  answers the discovery broadcast from its factory address `192.168.0.222`. Version 1.3.1 saved that
+  address, although it cannot be reached from the home network, and then stayed on it: the entry
+  was stuck in *retry* and every device was unavailable. Now an address is only saved if the Cube's
+  data port answers there, and the lookup by serial number also runs when Home Assistant starts or
+  the entry is set up again, not only while it is running.
+
+## [1.3.1] - 2026-11-20
+
+### Changed
+- **Writing the weekly programme: the read-back is checked again later.** On a real Cube the new
+  programme shows up in the Cube's data only after the thermostat has taken it, about two minutes
+  after the write. The service now reports `sent_not_confirmed` right away in that case (instead of
+  suggesting a failure), checks again five minutes later and logs a warning if the Cube still shows
+  the old programme. The README explains the delay.
+
+## [1.3.0] - 2026-11-20
+
+### Added
+- **Setting the weekly heating programme.** The service `maxcube_local.set_schedule` writes a daily
+  programme to chosen days of one or more radiator thermostats (periods with the temperature that applies
+  until a time; at most seven per day, 5-minute steps, half degrees, the last period ends at 24:00).
+  `dry_run: true` only checks the request. After writing, the programme is read back from the Cube and
+  checked; a day the Cube did not take raises an error. It refuses to write when the Cube has used 90 %
+  of its radio time.
+- Tests for the validation, for the radio message (identical to the library's for a full day) and for
+  the read-back.
+
+### Changed
+- The radio message is built in the integration instead of with the library's `set_programme`, which
+  skips a write when its own (half-degree-cutting) copy looks equal and pads a short day with one byte
+  instead of two.
+
+## [1.2.0] - 2026-11-20
+
+### Added
+- **Weekly heating programme (read-only).** The programme of each radiator thermostat is shown in the
+  climate entity's `schedule` attribute: for every day the setpoints with the time until which each
+  temperature applies. Wall thermostats show the programme of a radiator thermostat in the same room.
+  `scheduled_temperature` is the temperature the programme sets right now. The programme is decoded
+  with exact half degrees (the `maxcube-api` library cuts 21.5 to 21), and the large attribute is kept
+  out of the history database.
+- **Service `maxcube_local.get_schedule`** returns the weekly programme of the chosen thermostats as a
+  response.
+- Tests for the decoding (day order, half degrees, end of day, the C message).
+
+## [1.1.0] - 2026-11-20
+
+### Added
+- **Cube diagnostics.** Two diagnostic sensors on the Cube device: the radio **duty cycle** (%) and
+  the number of **free memory slots**. At a duty cycle of 100 % the Cube sends no radio commands for
+  about an hour, so this is worth watching when many settings are changed.
+- **The Cube is found again after an IP change.** The Cube's serial number is saved; when a poll
+  fails, the integration looks for a Cube with that serial number on the network and saves its new
+  address (at most every five minutes).
+- **Service `maxcube_local.reconnect`** closes the connection to the Cube and reads everything again
+  (optionally for one Cube).
+- Tests for the status values and for finding the Cube by its serial number (new CI workflow).
+
+### Changed
+- Every poll now opens its own short connection to the Cube and closes it again. This keeps the
+  duty cycle and the free memory slots current (the Cube reports them when a connection starts) and
+  leaves the Cube free for other clients between polls.
+
+## [1.0.0] - 2026-11-20
+
+The integration is stable: entities, configuration data and services stay as they are. From
+now on version numbers follow [Semantic Versioning](https://semver.org/): a breaking change
+raises the major version, a new feature the minor version, a fix the patch version.
+
+### Changed
+- README (en/de): the installation section now starts with finding **eQ-3 MAX! Cube** through
+  HACS search (the integration is in the HACS catalog); the custom repository steps stay as a
+  fallback.
+
+### Fixed
+- **No more deprecation warnings on Home Assistant 2026.11.** The thermostats now
+  provide `native_current_temperature`, `native_target_temperature` and
+  `_attr_native_temperature_unit` (the old names stop working in Home Assistant
+  2027.11), and the devices are linked to the Cube hub with `via_device_id`
+  (`via_device` stops working in 2027.8). Older Home Assistant versions keep
+  using the previous names, so the minimum version is unchanged.
+
+## [0.4.0] - 2026-11-17
+
+### Added
+- **Automatic Cube discovery** in the config flow: the integration sends a UDP
+  broadcast on the local network and pre-fills the Cube's IP address, so you no
+  longer have to look it up. Manual entry still works as a fallback.
+- The **device serial number** (e.g. `JEQ…`/`KEQ…`) is now shown on each MAX!
+  device and on the Cube hub, via Home Assistant's device registry.
+- Release assets are now **counted downloads**: each release ships a
+  `maxcube_local.zip` asset and HACS installs from it (`zip_release`).
+
+### Changed
+- Documentation/licensing: added a `NOTICE` file crediting the Apache-2.0
+  licensed Home Assistant Core `maxcube` integration (from which the climate
+  platform is derived) and including the Apache License 2.0 text. The READMEs now
+  state that `MassiPi/maxcube` was used only as a reference, with no code taken
+  from it. This addresses the HACS default-store review (PR hacs/default#14273).
+
+## [0.3.1] - 2026-11-16
+
+### Added
+- **Connectivity** binary sensor on the Cube device (on = the Cube is reachable /
+  the last poll succeeded), giving the hub its own status entity. It stays
+  available even when the Cube is offline, so it can report the disconnected state.
+
+## [0.3.0] - 2026-11-16
+
+### Changed
+- **Renamed the integration domain `maxcube` → `maxcube_local`** so it no longer
+  collides with the Home Assistant core integration — a requirement for HACS
+  default-store inclusion. **After updating, delete the old integration entry and
+  add it again.** Entity IDs (e.g. `climate.<name>`) stay the same, so recorder
+  history continues.
+
+### Added
+- Measured temperature is now shown to **0.1 °C** (climate current temperature and
+  the temperature sensor). Setpoints stay in 0.5 °C steps, as the Cube requires.
+
+## [0.2.0] - 2026-11-16
+
+### Added
+- **Temperature sensor** per thermostat (the measured room temperature),
+  usable for graphs and automations instead of only the climate attribute.
+- The **Cube appears as a hub device** with its firmware version; all
+  thermostats and contacts group under it and are assigned to their MAX! room.
+- **Comfort/eco setpoints and valve position** exposed as climate attributes.
+- Donation/support section in the READMEs and a `.github/FUNDING.yml`.
+
+## [0.1.1] - 2026-11-16
+
+### Fixed
+- Entity setup crashed with
+  `is_thermostat() takes 1 positional argument but 2 were given` because the
+  device-type checks were called on the Cube instead of the device, so **no
+  entities were created**. They are now called on the device.
+
+## [0.1.0] - 2026-11-16
+
+### Added
+- Initial MVP: config flow, `climate` entities for radiator and wall thermostats,
+  window/battery `binary_sensor` entities, a valve-position `sensor`, and an
+  options flow for the poll interval. Local TCP via `maxcube-api`, no cloud.

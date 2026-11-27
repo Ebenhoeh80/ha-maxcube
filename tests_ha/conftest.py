@@ -1,6 +1,6 @@
 """Fixtures for tests that run the integration inside a real Home Assistant core (CI only).
 
-They use ``pytest-homeassistant-custom-component`` and run in their own CI job. The Cube is replaced by
+They use ``pytest-homeassistant`` and run in their own CI job. The Cube is replaced by
 a fake that behaves like the library's ``MaxCube``: no network, but real device objects.
 """
 
@@ -29,12 +29,13 @@ from maxcube.room import MaxRoom
 from maxcube.thermostat import MaxThermostat
 from maxcube.wallthermostat import MaxWallThermostat
 from maxcube.windowshutter import MaxWindowShutter
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import DOMAIN
 from custom_components.maxcube_local.linkstatus import DeviceStatus
+from custom_components.maxcube_local.telegram_log import TelegramLog
 
-pytest_plugins = "pytest_homeassistant_custom_component"
+pytest_plugins = "pytest_homeassistant"
 
 CUBE_SERIAL = "KEQ0523864"
 HOST = "192.168.10.60"
@@ -65,11 +66,6 @@ def device_for_identifier(
         return registry.async_get_device_by_identifier(identifier, entry_id)
     device = registry.async_get_device(identifiers={identifier})
     return device if device is not None and entry_id in device_config_entries(device) else None
-
-
-@pytest.fixture(autouse=True)
-def _enable_custom_integrations(enable_custom_integrations: None) -> None:
-    """Let Home Assistant load integrations from ``custom_components/``."""
 
 
 @pytest.fixture(autouse=True)
@@ -167,6 +163,7 @@ class FakeCube:
         # The M message as the real cube keeps it: the Base64 part, and the missing flag.
         self.last_m_message: str | None = None
         self.m_message_missing = False
+        self.telegram_log = TelegramLog()
         room = MaxRoom()
         room.id = 1
         room.name = "Bad"

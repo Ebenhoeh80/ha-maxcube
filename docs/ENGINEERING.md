@@ -202,3 +202,32 @@ IDs with `0x22` is a Cube configuration change, not part of the integration code
   no extra telegram is sent unless the caller actually asks for a different value.
 - **Verification:** two regression tests in `tests_ha/test_climate_temperature.py` mock
   `async_request_refresh` to simulate the missing poll; both failed before the fix and pass after it.
+
+## 10. Observability and quality gates (2026-11-27)
+
+- **Telegram correlation (P1-1):** `telegram_log.py` records sent telegrams and correlates them with
+  `L:` answers and the Cube's `S:` status. `S:1` means the Cube discarded a command and logs a
+  warning. Pending/rejected counts and the queue values appear on the diagnostic sensors and in
+  the redacted diagnostics download. This is observation only: the cause of the live setpoint
+  cross-talk is still unknown, so **wait at least 60 s between room changes**.
+- **Actions (P1-3):** integration-wide actions are registered from `services.py` via
+  `async_setup_services`, with `CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)`.
+  `get_schedule`/`set_schedule` use the official entity-service helper on HA 2025.10+ and the
+  platform route on the declared 2025.3 minimum, so no action is registered twice. Reboot is an
+  admin action and uses the serial read from the Cube, never a user-supplied address.
+- **Gates (P1-4):** the combined run still requires 95 % overall; `scripts/check_coverage.py`
+  applies the floor per module (two socket-hardware modules are listed as exempt in the script).
+  `mypy --strict --follow-imports=skip` runs on the pure-logic modules in CI. Diagnostics are
+  checked key by key in `tests_ha/test_diagnostics.py`, and `tests/test_release_consistency.py`
+  checks manifest/changelog version, DE/EN links and translation parity.
+- **Test framework (P2-1):** `pytest-homeassistant` replaces the broken
+  `pytest-homeassistant-custom-component`; the pinned HA-2025.3 job was permanently red and now
+  guards pure logic on the oldest supported Python instead.
+- **Parser and reconnect (P2-3/P2-4):** `M:` index/total is validated, only a complete message
+  replaces the remembered configuration, and `L:` entries stay inside their length byte. A failed
+  connection is slowed down with capped backoff and recorded in diagnostics.
+- **Async client (P2-2):** `async_client.py` is a typed asyncio building block with line framing,
+  timeouts, serialisation and a cancellation-safe lock; it has strict-mypy and unit coverage but
+  is **not yet wired into the coordinator**. `async-dependency` therefore remains `todo`.
+- **Runbook (P2-5):** `RUNBOOK.md` documents the `C:`↔`M:` comparison and the 60 s rule. The
+  `0x22` correction was observed once; its stability is unverified.

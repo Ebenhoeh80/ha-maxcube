@@ -76,6 +76,41 @@ def _display_buttons(
     ]
 
 
+async def async_send_reboot(hass: HomeAssistant, serial: str) -> bool:
+    """Send the reboot datagram to the Cube with this serial number.
+
+    The serial comes from the Cube's own ``H:`` answer, never from a user field,
+    so a reboot can never be aimed at a guessed address. Shared by the (disabled
+    by default) button and by the admin action.
+    """
+    if not is_valid_serial(serial):
+        _LOGGER.error(
+            "Cannot reboot MAX! Cube: its identity is not a valid serial number (%r)",
+            serial,
+        )
+        return False
+    payload = _MAGIC_PREFIX + serial.encode("ascii") + _REBOOT_OPCODE
+    # Blocking socket work belongs in the executor, not the event loop.
+    await hass.async_add_executor_job(_send_reboot, payload)
+    _LOGGER.info("Sent reboot request to MAX! Cube")
+    return True
+
+
+def _send_reboot(payload: bytes) -> None:
+    """Broadcast the reboot datagram; never raises on a network error."""
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(_SEND_TIMEOUT)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(payload, (CUBE_BROADCAST, CUBE_CONTROL_PORT))
+    except OSError as err:
+        _LOGGER.warning("Could not send the reboot request to the MAX! Cube: %s", err)
+    finally:
+        if sock is not None:
+            sock.close()
+
+
 class MaxCubeRebootButton(ButtonEntity):
     """Restarts the MAX! Cube by sending it a control datagram."""
 
@@ -99,33 +134,7 @@ class MaxCubeRebootButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Send the reboot datagram to the Cube."""
-        if not is_valid_serial(self._serial):
-            _LOGGER.error(
-                "Cannot reboot MAX! Cube: its identity is not a valid serial number (%r)",
-                self._serial,
-            )
-            return
-
-        payload = _MAGIC_PREFIX + self._serial.encode("ascii") + _REBOOT_OPCODE
-
-        # Blocking socket work belongs in the executor, not the event loop.
-        await self.hass.async_add_executor_job(self._send_reboot, payload)
-        _LOGGER.info("Sent reboot request to MAX! Cube")
-
-    @staticmethod
-    def _send_reboot(payload: bytes) -> None:
-        """Broadcast the reboot datagram; never raises on a network error."""
-        sock = None
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(_SEND_TIMEOUT)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.sendto(payload, (CUBE_BROADCAST, CUBE_CONTROL_PORT))
-        except OSError as err:
-            _LOGGER.warning("Could not send the reboot request to the MAX! Cube: %s", err)
-        finally:
-            if sock is not None:
-                sock.close()
+        await async_send_reboot(self.hass, self._serial)
 
 
 class MaxCubeDisplayButton(MaxCubeEntity, ButtonEntity):

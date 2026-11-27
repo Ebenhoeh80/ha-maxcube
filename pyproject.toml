@@ -27,6 +27,8 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"
+# maxcube-api ships no py.typed, so its symbols are Any until P2-2 provides a
+# typed client. CI additionally runs --strict on the seven pure-logic modules.
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_redundant_casts = true

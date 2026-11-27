@@ -14,7 +14,7 @@ from maxcube.device import (
     MAX_DEVICE_MODE_AUTOMATIC,
     MAX_DEVICE_MODE_MANUAL,
 )
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import DOMAIN
 from custom_components.maxcube_local.coordinator import MaxCubeCoordinator

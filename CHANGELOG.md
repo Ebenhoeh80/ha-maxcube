@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-27
+
+> Hinweis: Pairing ist weiterhin **nicht** unterstützt und ist nicht Teil dieser Version.
+
+### Added
+- **Funkaufträge sind beobachtbar.** Gesendete Telegramme werden mit den `L:`-Antworten der Geräte korreliert; der `S:`-Status des Cube (1 = verworfen), wartende Aufträge, freie Slots und Funkauslastung erscheinen als Attribute der Diagnose-Sensoren und in den Diagnostics. Ein verworfener Befehl löst eine Warnung mit dem Hinweis auf mindestens 60 Sekunden Abstand zwischen Raumbefehlen aus. Das ist eine Beobachtung, kein Root-Cause-Fix für die live beobachtete Sollwert-Kopplung.
+- **Neuer Sensor „Wartende Funkaufträge"** zeigt die aktuelle Warteschlange des Cube; ein fehlgeschlagener Verbindungsaufbau wird mit Backoff gedrosselt und in den Diagnostics sichtbar gemacht.
+- **Neustart als Admin-Aktion.** Der Reboot nutzt die vom Cube gelesene Seriennummer und ist nur für Administratoren aufrufbar; das Werksreset bleibt tabu.
+- **Runbook (DE/EN)** für den `C:`↔`M:`-Vergleich und die 60-s-Regel bei Raumwechseln.
+- **Typisierter Async-Client-Baustein** mit Zeilenframing, Timeouts und cancellingsicherem Lock; er ist noch nicht im Coordinator aktiviert.
+
+### Changed
+- Actions werden zentral in `services.py` registriert; Entity-Actions nutzen ab HA 2025.10 den offiziellen Helper, ältere Cores behalten den Plattformweg. Das Test-Framework nutzt `pytest-homeassistant`, und der dauerhaft blockierende Mindest-HA-Job prüft jetzt die reine Logik auf der ältesten unterstützten Python-Version.
+- Der `M:`-Parser prüft Index/Gesamtzahl und ersetzt die gemerkte Konfiguration nur durch eine vollständige Nachricht.
+- Qualitäts-Gates: Coverage-Grenze pro Modul mit begründeten Ausnahmen für Socketpfade, `mypy --strict` für die reinen Logikmodule, Diagnostics- und Release-Konsistenzprüfung inklusive DE/EN-Parität. `strict-typing` und `async-dependency` bleiben als Platinum-Ziele dokumentiert.
+
 ## [1.8.6] - 2026-11-25
 
 ### Fixed

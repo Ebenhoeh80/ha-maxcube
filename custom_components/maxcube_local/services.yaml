@@ -6,6 +6,14 @@ reconnect:
         config_entry:
           integration: maxcube_local
 
+reboot:
+  fields:
+    entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: maxcube_local
+
 get_schedule:
   target:
     entity:

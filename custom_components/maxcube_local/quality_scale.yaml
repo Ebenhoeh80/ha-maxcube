@@ -94,4 +94,4 @@ rules:
     comment: The integration makes no HTTP requests.
   strict-typing:
     status: todo
-    comment: Type hints are present but the code is not checked with strict mypy.
+    comment: The seven pure-logic modules pass mypy --strict in CI. The HA-dependent modules and the maxcube-api boundary still need strict checking (the library ships no py.typed), so Platinum is not claimed.
