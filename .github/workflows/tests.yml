@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest-homeassistant "maxcube-api>=0.4.3"
+          pip install pytest-homeassistant pytest-cov "maxcube-api>=0.4.3"
       - name: Run Home Assistant tests
         run: |
           pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local
