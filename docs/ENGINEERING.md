@@ -206,10 +206,13 @@ IDs with `0x22` is a Cube configuration change, not part of the integration code
 ## 10. Observability and quality gates (2026-11-27)
 
 - **Telegram correlation (P1-1):** `telegram_log.py` records sent telegrams and correlates them with
-  `L:` answers and the Cube's `S:` status. `S:1` means the Cube discarded a command and logs a
-  warning. Pending/rejected counts and the queue values appear on the diagnostic sensors and in
-  the redacted diagnostics download. This is observation only: the cause of the live setpoint
-  cross-talk is still unknown, so **wait at least 60 s between room changes**.
+  `L:` answers and the Cube's `S:` status. The documented wire format is
+  `S:<duty hex>,<result>,<free slots hex>`; `result = 1` means the Cube discarded a command and
+  logs a warning. Duty cycle, free slots, locally pending/rejected counts appear on the diagnostic
+  sensors and in the redacted diagnostics download. The protocol has no queue-length field, so
+  the misleading "Queued telegrams" sensor was removed in 1.9.1. This is observation only: the
+  cause of the live setpoint cross-talk is still unknown, so **wait at least 60 s between room
+  changes**.
 - **Actions (P1-3):** integration-wide actions are registered from `services.py` via
   `async_setup_services`, with `CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)`.
   `get_schedule`/`set_schedule` use the official entity-service helper on HA 2025.10+ and the

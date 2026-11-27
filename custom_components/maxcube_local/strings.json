@@ -76,9 +76,6 @@
       },
       "free_memory_slots": {
         "name": "Free memory slots"
-      },
-      "queued_telegrams": {
-        "name": "Queued telegrams"
       }
     },
     "binary_sensor": {

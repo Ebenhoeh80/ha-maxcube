@@ -236,7 +236,8 @@ sent immediately and read back at the next poll.
 
 **Operating rule:** wait at least 60 seconds between commands to different rooms.
 Radio commands are observable now: the diagnostic sensors and the downloaded
-diagnostics show the `S:` queue status, pending telegrams and rejected commands.
+diagnostics show the `S:` command result, radio duty cycle, free slots and locally pending
+telegrams. The Cube does not report a queue length.
 See the [runbook](docs/RUNBOOK.md) for how to compare `C:` and `M:` room codes and
 what the remaining open questions are.
 

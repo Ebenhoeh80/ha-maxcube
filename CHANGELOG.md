@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-27
+
+### Fixed
+- **Der `S:`-Parser liest wieder echte Cube-Antworten.** Die Protokollreferenz definiert `S:<Funkauslastung hex>,<Ergebnis>,<freie Plätze hex>` mit drei Feldern. Die Fassung 1.9.0 erwartete vier Felder in falscher Reihenfolge und verwarf damit jede echte Antwort: `cube_status` blieb leer und eine verworfene Befehlswarnung konnte nicht auslösen. Ein lokales `S:26,0,31` wird jetzt als 38 % Funkauslastung, Ergebnis 0 und 49 freie Plätze gelesen; `S:FF,1,00` als 100 %, verworfen, 0 Plätze.
+- **Der Sensor „Wartende Funkaufträge" wurde entfernt.** Er behauptete eine Warteschlangenlänge, die das Protokoll nicht meldet. `pending_telegrams` bleibt als Beobachtung lokal gesendeter, noch nicht per `L:` bestätigter Telegramme in den Diagnose-Sensoren und im Diagnosebericht sichtbar; es ist weiterhin kein Beweis für eine Ankunft am Thermostat. Das Runbook beschreibt jetzt das korrekte Format und die Bedeutung der Felder.
+
 ## [1.9.0] - 2026-11-27
 
 > Hinweis: Pairing ist weiterhin **nicht** unterstützt und ist nicht Teil dieser Version.

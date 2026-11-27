@@ -228,11 +228,14 @@ hatten, wodurch Sollwert-Befehle zwischen Räumen gekoppelt wurden. Das Korrigie
 ## 10. Beobachtbarkeit und Qualitäts-Gates (27.11.2026)
 
 - **Telegramm-Korrelation (P1-1):** `telegram_log.py` zeichnet gesendete Telegramme auf und
-  korreliert sie mit `L:`-Antworten und der `S:`-Antwort des Cube. `S:1` bedeutet, dass der Cube
-  einen Befehl verworfen hat; es wird eine Warnung geloggt. Ausstehende/verworfene Zähler und die
-  Warteschlangenwerte erscheinen in den Diagnose-Sensoren und im redaktierten Diagnose-Download.
-  Das ist reine Beobachtung: die Ursache des live beobachteten Sollwert-Übersprechens ist weiterhin
-  unbekannt, daher **mindestens 60 s Abstand zwischen Raumänderungen**.
+  korreliert sie mit `L:`-Antworten und der `S:`-Antwort des Cube. Das dokumentierte Format ist
+  `S:<Funkauslastung hex>,<Ergebnis>,<freie Plätze hex>`; `Ergebnis = 1` bedeutet, dass der Cube
+  einen Befehl verworfen hat; es wird eine Warnung geloggt. Funkauslastung, freie Plätze sowie
+  lokal ausstehende/verworfene Zähler erscheinen in den Diagnose-Sensoren und im redaktierten
+  Diagnose-Download. Das Protokoll kennt keine Warteschlangenlänge; der irreführende Sensor
+  „Wartende Funkaufträge" wurde in 1.9.1 entfernt. Das ist reine Beobachtung: die Ursache des live
+  beobachteten Sollwert-Übersprechens ist weiterhin unbekannt, daher **mindestens 60 s Abstand
+  zwischen Raumänderungen**.
 - **Aktionen (P1-3):** integrationsweite Aktionen werden aus `services.py` über
   `async_setup_services` registriert, mit `CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)`.
   `get_schedule`/`set_schedule` nutzen ab HA 2025.10 den offiziellen Entity-Service-Helper und auf

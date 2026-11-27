@@ -88,7 +88,6 @@ class CubeSnapshot:
     # Last S-message values: 1 means the Cube discarded a command. ``None`` means
     # no S message has been seen yet, not "0".
     queue_status: int | None = None
-    queued_telegrams: int | None = None
     pending_telegrams: int = 0
     rejected_commands: int = 0
 
@@ -135,7 +134,6 @@ def take_snapshot(
         devices=MappingProxyType(devices),
         room_names=MappingProxyType({room.id: room.name for room in getattr(cube, "rooms", [])}),
         queue_status=queue.get("status"),
-        queued_telegrams=queue.get("queued_telegrams"),
         pending_telegrams=counts.get("pending", 0),
         rejected_commands=log.rejected_count if log is not None else 0,
     )

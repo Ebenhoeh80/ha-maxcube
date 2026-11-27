@@ -1,16 +1,17 @@
-"""Observe outgoing radio telegrams and the Cube's queue answers (pure logic).
+"""Observe outgoing radio telegrams and the Cube's ``S:`` answers (pure logic).
 
 A command sent to the Cube is *not* the same as a command carried out by a
 thermostat.  The Cube answers with an ``L:`` frame when a device reports again,
-and its ``S:`` line contains the queue state: duty cycle, free memory slots,
-queued telegrams and a status byte (``1`` = the Cube discarded a command).
-This module correlates the hex telegrams built by :mod:`cube` with those
-answers so a waiting or rejected command is visible in diagnostics and in the
-log instead of being mistaken for a lost setpoint.
+and its ``S:`` line reports the radio duty cycle, the command result and the
+free memory slots (Bouni, ``S-Message.md``): ``S:<duty>,<result>,<free>``.
+``result = 1`` means the Cube discarded a command.  This module correlates the
+hex telegrams built by :mod:`cube` with those answers so a rejected command is
+visible in diagnostics and in the log instead of being mistaken for a lost
+setpoint.
 
-It deliberately does **not** queue, resend or reorder commands.  The Cube owns
-the queue; a second queue here would be a claim we cannot prove.  Keeping the
-last few telegrams is only an observation aid.
+The protocol has **no** field for the number of queued telegrams.  Locally
+tracked ``pending`` telegrams are an observation of what this integration sent
+without an ``L:`` acknowledgement yet; they are not a Cube queue count.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from datetime import UTC, datetime
 _TELEGRAM_PREFIX_LENGTH = 12
 _TELEGRAM_ADDRESS_LENGTH = 6
 _TELEGRAM_ADDRESS_END = _TELEGRAM_PREFIX_LENGTH + _TELEGRAM_ADDRESS_LENGTH
-_S_MESSAGE_FIELDS = 4
+_S_MESSAGE_FIELDS = 3
 _BYTE_MAX = 0xFF
 _DUTY_FULL = 100
 
@@ -61,26 +62,32 @@ def rf_address_from_telegram(telegram: str) -> str | None:
     )
 
 
-def parse_s_status(message: str) -> tuple[int, int, int, int] | None:
-    """Parse ``S:<status>,<duty>,<free>,<queued>``; all three counts are hex.
+def parse_s_status(message: str) -> tuple[int, int, int] | None:
+    """Parse ``S:<duty hex>,<result>,<free slots hex>`` from the Cube.
 
-    Returns ``(status, duty_cycle, free_memory_slots, queued_telegrams)``.
-    The status byte is ``1`` when the Cube discarded a command.  Values out of
-    range are rejected: a wrong count must not be shown as a queue fact.
+    Returns ``(result, duty_cycle_percent, free_memory_slots)``.  A result of
+    ``1`` means the Cube discarded a command.  The duty cycle ``0xFF`` is the
+    Cube's way of reporting a completely used radio budget and becomes 100 %.
+    Values out of range are rejected: a wrong count must not be shown as a
+    queue fact.  The four-field form used by an early draft is not a Cube
+    message and is rejected as well.
     """
     parts = message.strip().split(",")
-    if len(parts) < _S_MESSAGE_FIELDS or not parts[0].startswith("S:"):
+    if len(parts) != _S_MESSAGE_FIELDS or not parts[0].startswith("S:"):
         return None
     try:
-        values = tuple(int(part.strip().removeprefix("S:"), 16) for part in parts[:4])
+        duty = int(parts[0].removeprefix("S:").strip(), 16)
+        result = int(parts[1].strip(), 16)
+        free = int(parts[2].strip(), 16)
     except ValueError:
         return None
-    status, duty, free, queued = values
-    if status not in (0, 1) or duty > _BYTE_MAX or max(free, queued) > _BYTE_MAX:
+    if result not in (0, 1):
         return None
-    # 0xFF is how the Cube reports a completely used radio budget. Keep the raw
-    # value here; the H-message parser applies the same convention (100 %).
-    return status, _DUTY_FULL if duty == _BYTE_MAX else duty, free, queued
+    if not 0 <= free <= _BYTE_MAX:
+        return None
+    if duty != _BYTE_MAX and not 0 <= duty <= _DUTY_FULL:
+        return None
+    return result, _DUTY_FULL if duty == _BYTE_MAX else duty, free
 
 
 class TelegramLog:
@@ -93,7 +100,6 @@ class TelegramLog:
             "status": None,
             "duty_cycle": None,
             "free_memory_slots": None,
-            "queued_telegrams": None,
         }
         self.rejected_count = 0
 
@@ -128,19 +134,18 @@ class TelegramLog:
         return 0
 
     def record_status(
-        self, status: int, duty_cycle: int, queued: int, *, free_slots: int | None = None
+        self, status: int, duty_cycle: int, *, free_slots: int | None = None
     ) -> bool:
-        """Update queue values from an ``S:`` answer; return True when a command was rejected.
+        """Update the values from an ``S:`` answer; return True when a command was rejected.
 
         A rejection is attributed to the oldest pending telegram, if there is
-        one.  Without a tracked telegram the event is still counted: the queue
-        status itself remains visible.
+        one.  Without a tracked telegram the event is still counted: the result
+        itself remains visible.  The Cube does not report a queue length.
         """
         self.queue_status = {
             "status": status,
             "duty_cycle": duty_cycle,
             "free_memory_slots": free_slots,
-            "queued_telegrams": queued,
         }
         if status != 1:
             return False
@@ -152,7 +157,7 @@ class TelegramLog:
         return True
 
     def record_h_status(self, duty_cycle: int | None, free_slots: int | None) -> None:
-        """Fill missing queue values from the ``H:`` line of a poll."""
+        """Fill missing status values from the ``H:`` line of a poll."""
         if duty_cycle is not None:
             self.queue_status["duty_cycle"] = duty_cycle
         if free_slots is not None:

@@ -49,7 +49,6 @@ async def async_get_config_entry_diagnostics(
                 "duty_cycle": snapshot.duty_cycle,
                 "free_memory_slots": snapshot.free_memory_slots,
                 "queue_status": snapshot.queue_status,
-                "queued_telegrams": snapshot.queued_telegrams,
                 "pending_telegrams": snapshot.pending_telegrams,
                 "rejected_commands": snapshot.rejected_commands,
             },
