@@ -61,7 +61,8 @@ jobs:
       - name: Run Home Assistant tests
         run: |
           pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local
-          pytest tests -o asyncio_mode=auto -p no:cacheprovider --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing --cov-fail-under=95
+          # respx imports httpx at plugin load; HA 2026 aliases httpx only once at import.
+          pytest tests -o asyncio_mode=auto -p no:respx -p no:cacheprovider --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing --cov-fail-under=95
           coverage json -o coverage.json
           python scripts/check_coverage.py
       - name: Type check (mypy, with the real Home Assistant types)
