@@ -13,3 +13,19 @@ jobs:
     uses: Ebenhoeh80/.github/.github/workflows/release-zip.yml@027a1a4938327366197450ddc9d3bfc785e0fea2 # v1
     with:
       domain: maxcube_local
+
+  # The shared workflow publishes the German changelog section only. Public
+  # release notes need both languages, so replace the body with DE + EN here.
+  bilingual-notes:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Publish German and English release notes
+        run: |
+          python scripts/release_notes.py > release-notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
