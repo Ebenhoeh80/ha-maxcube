@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 from maxcube_local.async_client import AsyncCubeClient, AsyncCubeError
@@ -33,15 +34,17 @@ class FakeReader:
 class FakeWriter:
     """Just enough of StreamWriter to inspect what was sent."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, drain_error: OSError | None = None) -> None:
         self.written: list[bytes] = []
         self.closed = False
+        self.drain_error = drain_error
 
     def write(self, data: bytes) -> None:
         self.written.append(data)
 
     async def drain(self) -> None:
-        return None
+        if self.drain_error is not None:
+            raise self.drain_error
 
     def close(self) -> None:
         self.closed = True
@@ -50,8 +53,10 @@ class FakeWriter:
         return None
 
 
-def _client(data: bytes = b"H:01,02\r\n") -> tuple[AsyncCubeClient, FakeWriter]:
-    reader, writer = FakeReader(data), FakeWriter()
+def _client(
+    data: bytes = b"H:01,02\r\n", *, drain_error: OSError | None = None
+) -> tuple[AsyncCubeClient, FakeWriter]:
+    reader, writer = FakeReader(data), FakeWriter(drain_error=drain_error)
 
     async def connector(_host: str, _port: int) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         return cast(asyncio.StreamReader, reader), cast(asyncio.StreamWriter, writer)
@@ -137,3 +142,55 @@ def test_a_request_before_connect_is_rejected() -> None:
     client = AsyncCubeClient("127.0.0.1")
     with pytest.raises(AsyncCubeError, match="not connected"):
         asyncio.run(client.request("H:"))
+
+
+def test_a_slow_reply_becomes_a_typed_timeout_error() -> None:
+    class NeverReader(FakeReader):
+        async def readuntil(self, separator: bytes) -> bytes:
+            await asyncio.Event().wait()
+            return b""
+
+    reader, writer = NeverReader(), FakeWriter()
+
+    async def connector(_host: str, _port: int) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        return cast(asyncio.StreamReader, reader), cast(asyncio.StreamWriter, writer)
+
+    client = AsyncCubeClient("127.0.0.1", timeout=0.01, connector=connector)
+    asyncio.run(client.connect())
+    with pytest.raises(AsyncCubeError, match="did not answer in time"):
+        asyncio.run(client.request("H:"))
+
+
+def test_a_broken_teardown_does_not_hide_the_close() -> None:
+    client, writer = _client(drain_error=OSError("gone"))
+    asyncio.run(client.close())
+    assert writer.closed is True
+    assert client.connected is False
+
+
+def test_the_context_manager_connects_and_tears_down() -> None:
+    reader, writer = FakeReader(), FakeWriter()
+
+    async def connector(_host: str, _port: int) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        return cast(asyncio.StreamReader, reader), cast(asyncio.StreamWriter, writer)
+
+    async def exercise() -> None:
+        async with AsyncCubeClient("127.0.0.1", connector=connector) as client:
+            assert client.connected is True
+
+    asyncio.run(exercise())
+    assert writer.written == [b"q:\r\n"]
+    assert writer.closed is True
+
+
+def test_the_default_connector_uses_asyncio_streams() -> None:
+    reader, writer = FakeReader(), FakeWriter()
+
+    async def fake_open(host: str, port: int) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        assert (host, port) == ("127.0.0.1", 62910)
+        return cast(asyncio.StreamReader, reader), cast(asyncio.StreamWriter, writer)
+
+    with patch("asyncio.open_connection", fake_open):
+        client = AsyncCubeClient("127.0.0.1")
+        asyncio.run(client.connect())
+    assert client.connected is True

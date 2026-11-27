@@ -33,8 +33,16 @@ def main() -> int:
         return 2
     data = json.loads(REPORT.read_text(encoding="utf-8"))
     failures: list[str] = []
-    for entry in data["files"]:
-        relative = Path(entry["filename"]).as_posix()
+    # Coverage 7 writes ``files`` as a dict keyed by filename; older versions
+    # wrote a list of records. Accept both so the gate is not tied to a format.
+    raw_files = data["files"]
+    items = (
+        raw_files.items()
+        if isinstance(raw_files, dict)
+        else ((entry["filename"], entry) for entry in raw_files)
+    )
+    for filename, entry in items:
+        relative = Path(filename).as_posix()
         if "/custom_components/maxcube_local/" not in relative:
             continue
         name = Path(relative).stem
