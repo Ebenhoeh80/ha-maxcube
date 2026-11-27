@@ -16,7 +16,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maxcube_local.const import CONF_CUBE_SERIAL, DOMAIN
 from custom_components.maxcube_local.schedule import WEEK_DAYS
@@ -769,7 +769,9 @@ async def test_the_climate_entity_shows_the_values_of_the_last_poll(
 async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    from custom_components.maxcube_local.button import MaxCubeRebootButton
+    from custom_components.maxcube_local.button import (  # noqa: SLF001
+        _send_reboot,
+    )
 
     await _setup(hass, config_entry)
     entity_id = _entity_id(hass, "button", f"{CUBE_SERIAL}_reboot")
@@ -784,7 +786,7 @@ async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(
 
     with patch("custom_components.maxcube_local.button.socket.socket") as sock:
         sock.return_value.sendto.side_effect = OSError("unreachable")
-        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
+        _send_reboot(b"x")  # must not raise
     assert sock.return_value.close.called
 
 
@@ -819,14 +821,16 @@ async def test_a_serial_with_invalid_characters_is_not_sent(
 async def test_a_socket_error_during_creation_does_not_raise(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    from custom_components.maxcube_local.button import MaxCubeRebootButton
+    from custom_components.maxcube_local.button import (  # noqa: SLF001
+        _send_reboot,
+    )
 
     await _setup(hass, config_entry)
     with patch(
         "custom_components.maxcube_local.button.socket.socket",
         side_effect=OSError("no socket"),
     ):
-        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
+        _send_reboot(b"x")  # must not raise
 
 
 async def test_a_device_paired_later_gets_its_entities_without_a_reload(
@@ -1028,7 +1032,7 @@ async def test_two_quick_commands_are_read_back_within_a_few_seconds(
     """The default merge time of 10 s would leave the second change unseen for that long."""
     from datetime import timedelta
 
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
 
     await _setup(hass, config_entry)
     entity_id = _entity_id(hass, "climate", RADIATOR)
@@ -1261,7 +1265,7 @@ async def test_a_changed_m_message_is_saved_after_a_short_delay(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, hass_storage: dict
 ) -> None:
     from homeassistant.util import dt as dt_util
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
 
     await _setup(hass, config_entry)
     cube.last_m_message = "NEWER"
@@ -1317,7 +1321,7 @@ async def test_a_cube_that_stays_unreachable_for_six_hours_creates_a_repair_hint
     from datetime import timedelta
 
     from homeassistant.util import dt as dt_util
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
 
     await _setup(hass, config_entry)
     coordinator = config_entry.runtime_data
@@ -1348,7 +1352,7 @@ async def test_a_short_outage_creates_no_repair_hint(
     from datetime import timedelta
 
     from homeassistant.util import dt as dt_util
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
 
     await _setup(hass, config_entry)
     coordinator = config_entry.runtime_data
@@ -1442,7 +1446,7 @@ async def test_every_programme_write_keeps_one_check_and_no_callback_behind(
 async def test_an_unconfirmed_day_is_retried_once_and_then_only_warned(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
 ) -> None:
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
 
     from custom_components.maxcube_local.const import SCHEDULE_VERIFY_DELAY
 
@@ -1475,7 +1479,7 @@ async def test_an_unconfirmed_day_is_retried_once_and_then_only_warned(
 async def test_a_retry_is_skipped_when_the_radio_duty_cycle_is_high(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube, freezer
 ) -> None:
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
 
     from custom_components.maxcube_local.const import SCHEDULE_VERIFY_DELAY
 

@@ -47,7 +47,7 @@ jobs:
         run: pytest -q tests
 
   ha-tests:
-    # The integration running inside a real Home Assistant core (pytest-homeassistant-custom-component).
+    # The integration running inside a real Home Assistant core (pytest-homeassistant).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -57,31 +57,44 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest-homeassistant-custom-component "maxcube-api>=0.4.3"
+          pip install pytest-homeassistant pytest-cov "maxcube-api>=0.4.3"
       - name: Run Home Assistant tests
         run: |
           pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local
-          pytest tests -o asyncio_mode=auto -p no:cacheprovider --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing --cov-fail-under=95
+          # respx imports httpx at plugin load; HA 2026 aliases httpx only once at import.
+          pytest tests -o asyncio_mode=auto -p no:respx -p no:cacheprovider --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing --cov-fail-under=95
+          coverage json -o coverage.json
+          python scripts/check_coverage.py
       - name: Type check (mypy, with the real Home Assistant types)
         run: |
           pip install mypy
           mypy custom_components/maxcube_local
+          # The pure logic has no Home Assistant types to hide behind: hold it to
+          # --strict and skip the imports (the HA-dependent modules are checked above).
+          mypy --strict --follow-imports=skip \
+            custom_components/maxcube_local/async_client.py \
+            custom_components/maxcube_local/telegram_log.py \
+            custom_components/maxcube_local/reconnect.py \
+            custom_components/maxcube_local/schedule.py \
+            custom_components/maxcube_local/health.py \
+            custom_components/maxcube_local/identity.py \
+            custom_components/maxcube_local/display.py \
+            custom_components/maxcube_local/const.py
 
   ha-tests-min:
-    # The declared minimum (Home Assistant 2025.3.0, pytest-homeassistant-custom-component
-    # 0.13.220) must stay green. The options test awaits the scheduled reload so older cores do not
-    # leave a pending task at teardown. Verified locally on 2026-11-22.
+    # pytest-homeassistant is version-locked to the matching Home Assistant core;
+    # there is no matching package for the declared minimum HA 2025.3. The old
+    # 0.13.220 pin was permanently broken, so this job now guards the pure logic
+    # (parsers, guards, backoff, telegram correlation) on the oldest supported Python.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
-          python-version: "3.13"
+          python-version: "3.12"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest-homeassistant-custom-component==0.13.220 "maxcube-api>=0.4.3"
-      - name: Run Home Assistant tests (minimum version)
-        run: |
-          pytest -c tests_ha/pytest.ini tests_ha --cov=custom_components/maxcube_local
-          pytest tests -o asyncio_mode=auto -p no:cacheprovider --cov=custom_components/maxcube_local --cov-append --cov-report=term-missing --cov-fail-under=95
+          pip install pytest "maxcube-api>=0.4.3"
+      - name: Run pure-logic tests (minimum Python)
+        run: pytest -q tests

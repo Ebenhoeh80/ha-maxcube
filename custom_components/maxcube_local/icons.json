@@ -1,4 +1,7 @@
 {
+  "services": {
+    "reboot": "mdi:restart"
+  },
   "entity": {
     "sensor": {
       "valve_position": {
@@ -9,6 +12,9 @@
       },
       "free_memory_slots": {
         "default": "mdi:memory"
+      },
+      "queued_telegrams": {
+        "default": "mdi:message-processing"
       }
     },
     "button": {

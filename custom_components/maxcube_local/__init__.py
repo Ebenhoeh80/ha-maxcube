@@ -3,27 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-import voluptuous as vol
 from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-    callback,
-)
-from homeassistant.exceptions import ConfigEntryError, ServiceValidationError
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import discovery_flow
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
-from maxcube.device import MaxDevice
 
 from .card import async_register_card
 from .const import (
@@ -34,15 +24,13 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MANUFACTURER,
-    SERVICE_COPY_SCHEDULE,
-    SERVICE_RECONNECT,
     STORAGE_VERSION,
 )
 from .coordinator import MaxCubeConfigEntry, MaxCubeCoordinator, m_message_storage_key
 from .discovery import discover_cubes, is_reachable
 from .identity import cube_title, is_generated_title
 from .issues import async_setup_issues
-from .schedule import WEEK_DAYS
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,92 +42,12 @@ PLATFORMS: list[Platform] = [
 ]
 
 
-_RECONNECT_SCHEMA = vol.Schema({vol.Optional("entry_id"): str})
-_COPY_SCHEDULE_SCHEMA = vol.Schema(
-    {
-        vol.Required("source"): cv.entity_id,
-        vol.Required("targets"): vol.All(cv.ensure_list, [cv.entity_id], vol.Length(min=1)),
-        vol.Optional("days", default=list(WEEK_DAYS)): vol.All(
-            cv.ensure_list, [vol.In(WEEK_DAYS)], vol.Length(min=1)
-        ),
-    }
-)
-
-
-def _maxcube_device(
-    hass: HomeAssistant, entity_id: str
-) -> tuple[str, MaxCubeCoordinator, MaxDevice]:
-    """Return the entry id, coordinator and device behind a climate entity of this integration."""
-    entity = er.async_get(hass).async_get(entity_id)
-    if entity is not None and entity.platform == DOMAIN and entity.config_entry_id:
-        entry = hass.config_entries.async_get_entry(entity.config_entry_id)
-        coordinator = getattr(entry, "runtime_data", None)
-        if coordinator is not None and entity.unique_id in coordinator.data.devices:
-            # The device is listed in the snapshot; the library object is only the write target.
-            device = coordinator.cube.device_by_rf(entity.unique_id)
-            if device is not None:
-                return entity.config_entry_id, coordinator, device
-    raise ServiceValidationError(
-        translation_domain=DOMAIN,
-        translation_key="schedule_not_a_device",
-        translation_placeholders={"entity": entity_id},
-    )
-
-
-async def _async_copy_schedule(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    """Copy the weekly programme of one radiator thermostat to others of the same Cube."""
-    source_entry, coordinator, source = _maxcube_device(hass, call.data["source"])
-    found = {
-        entity_id: _maxcube_device(hass, entity_id)
-        for entity_id in dict.fromkeys(call.data["targets"])
-    }
-    if any(entry_id != source_entry for entry_id, _, _ in found.values()):
-        raise ServiceValidationError(
-            translation_domain=DOMAIN, translation_key="schedule_other_cube"
-        )
-    results = await coordinator.async_copy_schedule(
-        source.rf_address,
-        [device.rf_address for _, _, device in found.values()],
-        call.data["days"],
-    )
-    response: dict[str, Any] = {}
-    for entity_id, (_, _, device) in found.items():
-        response[entity_id] = {"result": dict(results[device.rf_address])}
-    return response
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration-wide service and the weekly-programme card."""
-
-    async def _handle_reconnect(call: ServiceCall) -> None:
-        """Close the connection to the Cube and read everything again."""
-        wanted = call.data.get("entry_id")
-        entries = [
-            entry
-            for entry in hass.config_entries.async_loaded_entries(DOMAIN)
-            if wanted in (None, entry.entry_id)
-        ]
-        if not entries:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="no_cube_configured"
-            )
-        for entry in entries:
-            await entry.runtime_data.async_reconnect()
-
-    hass.services.async_register(
-        DOMAIN, SERVICE_RECONNECT, _handle_reconnect, schema=_RECONNECT_SCHEMA
-    )
-
-    async def _handle_copy_schedule(call: ServiceCall) -> ServiceResponse:
-        return await _async_copy_schedule(hass, call)
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_COPY_SCHEDULE,
-        _handle_copy_schedule,
-        schema=_COPY_SCHEDULE_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
-    )
+    """Register actions and the weekly-programme card."""
+    async_setup_services(hass)
     await async_register_card(hass)
     # Offer Cubes on the network that are not set up yet (and update the address of known ones).
     async_at_started(hass, _async_scan_for_cubes)

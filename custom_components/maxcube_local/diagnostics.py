@@ -48,13 +48,28 @@ async def async_get_config_entry_diagnostics(
                 "firmware": snapshot.firmware_version,
                 "duty_cycle": snapshot.duty_cycle,
                 "free_memory_slots": snapshot.free_memory_slots,
+                "queue_status": snapshot.queue_status,
+                "queued_telegrams": snapshot.queued_telegrams,
+                "pending_telegrams": snapshot.pending_telegrams,
+                "rejected_commands": snapshot.rejected_commands,
             },
+            # Only telegram hex and RF addresses: no room names, titles or cube serial.
+            # ``getattr`` keeps the download useful for a Cube object that does not
+            # expose the observation log (older library builds, test doubles).
+            "telegram_observation": (
+                log.as_dict()
+                if getattr(coordinator, "_cube", None) is not None
+                and (log := getattr(coordinator.cube, "telegram_log", None)) is not None
+                else None
+            ),
             "last_update_success": coordinator.last_update_success,
             "polls": {
                 "total": coordinator.polls,
                 "failed": coordinator.failed_polls,
                 "last_duration_ms": coordinator.last_poll_ms,
                 "interval_s": coordinator.scan_interval,
+                "connect_backoff": coordinator.connect_backoff.as_dict(),
+                "blocked_connects": coordinator.blocked_connects,
             },
             "devices": devices,
         },

@@ -76,6 +76,9 @@
       },
       "free_memory_slots": {
         "name": "Freie Speicherplätze"
+      },
+      "queued_telegrams": {
+        "name": "Wartende Funkaufträge"
       }
     },
     "binary_sensor": {
@@ -118,6 +121,16 @@
         "entry_id": {
           "name": "Cube (Konfigurationseintrag)",
           "description": "Optional: nur dieser Cube. Ohne Angabe werden alle eingerichteten Cubes neu verbunden."
+        }
+      }
+    },
+    "reboot": {
+      "name": "Cube neu starten",
+      "description": "Startet den gewählten Cube neu. Alle Geräte sind kurz unterbrochen. Nur Administratoren können diese Aktion ausführen; die Adresse stammt aus der eigenen Identität des Cube, nicht aus einem Eingabefeld.",
+      "fields": {
+        "entry_id": {
+          "name": "Cube (Konfigurationseintrag)",
+          "description": "Der Cube, der neu gestartet wird."
         }
       }
     },
@@ -169,6 +182,9 @@
   "exceptions": {
     "no_cube_configured": {
       "message": "Es ist kein MAX! Cube eingerichtet."
+    },
+    "reboot_no_serial": {
+      "message": "Die Seriennummer des Cube ist nicht bekannt, es wurde kein Neustart gesendet."
     },
     "schedule_radiator_only": {
       "message": "Hier lassen sich nur Heizkörperthermostate programmieren."

@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 
 from maxcube.cube import DEFAULT_PORT, MaxCube
@@ -26,6 +27,9 @@ from .schedule import (
     parse_week_program,
     scheduled_temperature,
 )
+from .telegram_log import TelegramLog, parse_s_status
+
+_LOGGER = logging.getLogger(__name__)
 
 _DUTY_CYCLE_FIELD = 5
 _FREE_SLOTS_FIELD = 6
@@ -83,6 +87,33 @@ _M_ARGUMENT_PREFIX = "0,1,"
 _M_FIELD_INDEX = 2  # the Base64 data is the third field
 
 
+def parse_m_envelope(argument: str) -> tuple[int, int] | None:
+    """Return ``(index, total)`` from an M argument; ``None`` for a broken envelope.
+
+    The Cube sends ``<index>,<total>,<base64>``. Only a complete message
+    (``index == total``) may replace the remembered configuration: a fragment
+    with a smaller index is valid data but not a new full configuration.
+    """
+    parts = argument.split(",")
+    if len(parts) <= _M_FIELD_INDEX:
+        return None
+    try:
+        index, total = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if total < 1 or not 0 <= index < total:
+        return None
+    return index, total
+
+
+def is_complete_m_message(argument: str) -> bool:
+    """Return True only for a readable, complete M message (last fragment)."""
+    envelope = parse_m_envelope(argument)
+    if envelope is None or envelope[0] != envelope[1] - 1:
+        return False
+    return _readable_m_payload(argument.split(",")[_M_FIELD_INDEX])
+
+
 def _readable_m_payload(payload: str) -> bool:
     """Return True if the Base64 part of an M message decodes to some bytes."""
     if not payload:
@@ -106,6 +137,10 @@ class MaxCubeWithStatus(MaxCube):
     last_m_message: str | None = None
     # True when the last M message was empty or unreadable (see ``parse_m_message``).
     m_message_missing: bool = False
+    # Correlation of outgoing telegrams with the Cube's answers. The class-level
+    # instance keeps pure tests working that construct the object without __init__;
+    # __init__ replaces it with a fresh one per real Cube.
+    telegram_log: TelegramLog = TelegramLog()
 
     def __init__(
         self,
@@ -117,7 +152,44 @@ class MaxCubeWithStatus(MaxCube):
         # Set before super().__init__(): it reads the Cube, and the M message is parsed then.
         self.last_m_message = last_m_message
         self._now = now
+        self.telegram_log = TelegramLog()
         super().__init__(host, port, now)
+
+    def _send(self, message: str) -> bool:
+        """Send a radio telegram and record it for correlation with the Cube's answers."""
+        commander = self._MaxCube__commander  # the library's private connection handler
+        sent = bool(commander.send_radio_msg(message))
+        if sent:
+            now = getattr(self, "_now", datetime.now)
+            self.telegram_log.record_sent(message, now=now())
+        return sent
+
+    def _MaxCube__parse_responses(self, messages: Iterable[object]) -> None:
+        """Let the library parse its messages, but evaluate ``S:`` answers as well.
+
+        The library silently ignores ``S:``, which is the only real-time hint that
+        the Cube discarded a command.  We do not replace its dispatch: the same
+        message list is passed on unchanged after the ``S:`` values are recorded.
+        """
+        for msg in messages:
+            if getattr(msg, "cmd", "") == "S":
+                self._parse_s_message(getattr(msg, "arg", ""))
+        super()._MaxCube__parse_responses(messages)
+
+    def _parse_s_message(self, argument: str) -> None:
+        """Record the queue state of an ``S:`` line and warn when a command was discarded."""
+        parsed = parse_s_status(f"S:{argument}")
+        if parsed is None:
+            return
+        status, duty, free, queued = parsed
+        if self.telegram_log.record_status(status, duty, queued, free_slots=free):
+            _LOGGER.warning(
+                "MAX! Cube discarded a radio command (duty cycle %d%%, queue %d, free slots %d). "
+                "Wait at least 60 seconds between changes to several rooms.",
+                duty,
+                queued,
+                free,
+            )
 
     def write_day_schedule(
         self, thermostat: MaxThermostat, day: str, slots: list[dict]
@@ -130,8 +202,33 @@ class MaxCubeWithStatus(MaxCube):
         short day with one byte instead of two, so the message would be too short.
         """
         message = encode_set_programme(thermostat.rf_address, thermostat.room_id, day, slots)
-        commander = self._MaxCube__commander  # the library's private connection handler
-        return bool(commander.send_radio_msg(message))
+        return self._send(message)
+
+    def set_temperature_mode(
+        self, thermostat: MaxDevice, temperature: float | None, mode: int | None
+    ) -> bool:
+        """Keep the library's combined command, but record it for correlation."""
+        if not thermostat.is_thermostat() and not thermostat.is_wallthermostat():
+            return False
+        resolved_mode = thermostat.mode if mode is None else mode
+        resolved_temperature = (
+            0
+            if resolved_mode == MAX_DEVICE_MODE_AUTOMATIC
+            else thermostat.target_temperature
+            if temperature is None
+            else temperature
+        )
+        value = int(resolved_temperature * 2) + (resolved_mode << 6)
+        message = (
+            "000440000000"
+            + thermostat.rf_address.upper()
+            + f"{thermostat.room_id:02X}"
+            + f"{value:02X}"
+        )
+        if not self._send(message):
+            return False
+        self._apply_mode_state(thermostat, resolved_mode, resolved_temperature)
+        return True
 
     def set_mode(self, thermostat: MaxDevice, mode: int) -> bool:
         """Set a mode without the library's wall-thermostat ``AttributeError``.
@@ -157,8 +254,7 @@ class MaxCubeWithStatus(MaxCube):
             + f"{thermostat.room_id:02X}"
             + f"{value:02X}"
         )
-        commander = self._MaxCube__commander  # the library's private connection handler
-        if not commander.send_radio_msg(message):
+        if not self._send(message):
             return False
         self._apply_mode_state(thermostat, mode, temperature)
         return True
@@ -202,8 +298,7 @@ class MaxCubeWithStatus(MaxCube):
         if device is None or not device.is_wallthermostat():
             return False
         message = encode_display_setting(rf_address, show_actual)
-        commander = self._MaxCube__commander  # the library's private connection handler
-        return bool(commander.send_radio_msg(message))
+        return self._send(message)
 
     def parse_c_message(self, message: str) -> None:
         """Parse the C message as the library does, and keep the exact weekly programme.
@@ -231,15 +326,19 @@ class MaxCubeWithStatus(MaxCube):
         """
         parts = message.split(",")
         payload = parts[_M_FIELD_INDEX] if len(parts) > _M_FIELD_INDEX else ""
+        # A fragment is valid data, but only the last one is a full configuration.
+        complete = is_complete_m_message(message)
         if _readable_m_payload(payload):
             try:
                 super().parse_m_message(message)
-            except (IndexError, ValueError, struct.error):
+            except (IndexError, ValueError, struct.error, UnicodeDecodeError):
                 pass  # decodes, but its content is not an M message: treat it as unreadable
             else:
-                self.last_m_message = payload
-                self.m_message_missing = False
-                return
+                if complete:
+                    self.last_m_message = payload
+                self.m_message_missing = not complete
+                if complete:
+                    return
         self.m_message_missing = True
         if self.last_m_message:
             try:
@@ -253,6 +352,7 @@ class MaxCubeWithStatus(MaxCube):
         """Parse the H message as the library does, and keep the Cube's status values."""
         super().parse_h_message(message)
         self.duty_cycle, self.free_memory_slots = parse_h_status(message)
+        self.telegram_log.record_h_status(self.duty_cycle, self.free_memory_slots)
 
     def parse_l_message(self, message: str) -> None:
         """Parse the L message entry by entry; every value is read within its own entry.
@@ -267,7 +367,10 @@ class MaxCubeWithStatus(MaxCube):
         except (binascii.Error, ValueError):
             return
         for entry in split_l_entries(data):
-            device = self.device_by_rf(self.parse_rf_address(entry[1:4]))
+            rf_address = self.parse_rf_address(entry[1:4])
+            # A device report can be the answer to a command we sent earlier.
+            self.telegram_log.acknowledge(rf_address, now=getattr(self, "_now", datetime.now)())
+            device = self.device_by_rf(rf_address)
             if device is not None:
                 self._apply_l_entry(device, entry)
 

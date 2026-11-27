@@ -234,6 +234,12 @@ The integration polls the Cube (local, no cloud) every 60 s by default. Every po
 and closes it again, so other clients can use the Cube in between. Changes you make in Home Assistant are
 sent immediately and read back at the next poll.
 
+**Operating rule:** wait at least 60 seconds between commands to different rooms.
+Radio commands are observable now: the diagnostic sensors and the downloaded
+diagnostics show the `S:` queue status, pending telegrams and rejected commands.
+See the [runbook](docs/RUNBOOK.md) for how to compare `C:` and `M:` room codes and
+what the remaining open questions are.
+
 ## 💡 Use cases
 
 - **Heat the kids' room earlier on school days:** call `maxcube_local.set_schedule` (see above) from an

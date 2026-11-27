@@ -49,6 +49,8 @@ async def async_setup_entry(
             entities.append(MaxCubeStatusSensor(coordinator, "duty_cycle", PERCENTAGE))
         if snapshot.free_memory_slots is not None:
             entities.append(MaxCubeStatusSensor(coordinator, "free_memory_slots", None))
+        if snapshot.queued_telegrams is not None:
+            entities.append(MaxCubeStatusSensor(coordinator, "queued_telegrams", None))
     async_add_entities(entities)
 
 
@@ -124,6 +126,23 @@ class MaxCubeStatusSensor(CoordinatorEntity[MaxCubeCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        """Return the value from the Cube's latest H message (as of the last poll)."""
+        """Return the value from the Cube's latest H/S message (as of the last poll)."""
         return getattr(self.coordinator.data, self._key, None)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int | None]:
+        """Show queue information next to the duty-cycle and free-slot sensors.
+
+        A pending telegram has been sent but not yet acknowledged by an ``L:``
+        frame; a rejected command was discarded by the Cube (``S:`` status 1).
+        Neither is a promise that a setting has reached the thermostat.
+        """
+        if self._key not in ("duty_cycle", "free_memory_slots", "queued_telegrams"):
+            return {}
+        data = self.coordinator.data
+        return {
+            "cube_status": data.queue_status,
+            "pending_telegrams": data.pending_telegrams,
+            "rejected_commands": data.rejected_commands,
+        }
 

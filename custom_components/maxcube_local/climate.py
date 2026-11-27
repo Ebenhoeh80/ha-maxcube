@@ -102,6 +102,13 @@ async def async_setup_entry(
         return []
 
     async_add_devices_as_they_appear(entry, async_add_entities, _climates)
+    # HA 2025.10+ registers these actions from services.py in async_setup, so the
+    # platform does not need to be set up for them to exist. On the declared
+    # minimum (2025.3) the helper is absent and this route is still required.
+    from homeassistant.helpers import service as ha_service  # noqa: PLC0415
+
+    if hasattr(ha_service, "async_register_platform_entity_service"):
+        return
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(
         "get_schedule", None, "async_get_schedule", supports_response=SupportsResponse.ONLY
@@ -141,7 +148,7 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
     if _NATIVE_TEMPERATURES:
         _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     else:
-        _attr_temperature_unit = UnitOfTemperature.CELSIUS
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS  # type: ignore[misc]  # HA marks this Final, entities must set it
     # The Cube reports the measured temperature in 0.1 °C; setpoints are 0.5 °C.
     _attr_precision = PRECISION_TENTHS
     _attr_target_temperature_step = PRECISION_HALVES
@@ -244,12 +251,12 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
 
     else:
 
-        @property
+        @property  # type: ignore[misc]  # HA marks this Final, entities override it
         def current_temperature(self) -> float | None:
             """Return the measured temperature."""
             return self._measured_temperature()
 
-        @property
+        @property  # type: ignore[misc]  # HA marks this Final, entities override it
         def target_temperature(self) -> float | None:
             """Return the target temperature."""
             return self._target_temperature()

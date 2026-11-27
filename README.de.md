@@ -238,6 +238,12 @@ Die Integration fragt den Cube (lokal, ohne Cloud) standardmäßig alle 60 s ab.
 Verbindung und schließt sie wieder, damit andere Programme den Cube dazwischen nutzen können. Änderungen aus
 Home Assistant werden sofort gesendet und bei der nächsten Abfrage zurückgelesen.
 
+**Betriebsregel:** Warte mindestens 60 Sekunden zwischen Befehlen an verschiedene Räume.
+Funkaufträge sind jetzt beobachtbar: die Diagnose-Sensoren und der heruntergeladene
+Diagnosebericht zeigen den `S:`-Warteschlangenstatus, wartende Telegramme und verworfene
+Befehle. Im [Runbook](docs/de/RUNBOOK.md) steht, wie `C:`- und `M:`-Raumcodes verglichen
+werden und welche Fragen weiterhin offen sind.
+
 ## 💡 Anwendungsbeispiele
 
 - **Kinderzimmer an Schultagen früher heizen:** `maxcube_local.set_schedule` (siehe oben) aus einer Automation

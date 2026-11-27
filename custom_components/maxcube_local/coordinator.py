@@ -41,6 +41,7 @@ from .const import (
 from .discovery import discover_cubes, hosts_for_serial, is_reachable
 from .health import BatteryHold
 from .linkstatus import LinkStatusMaxCube
+from .reconnect import ConnectBackoff
 from .schedule import ScheduleError, changed_days, check_radio_budget, source_programme
 from .snapshot import CubeSnapshot, DeviceState, schedule_as_dict, take_snapshot
 
@@ -145,6 +146,9 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
         self._saved_m_message: str | None = None
         # Polls in a row in which the Cube sent no readable M message (see ``issues.py``).
         self.m_missing_polls = 0
+        # A Cube whose TCP port is blocked (e.g. by the MAX! app) is retried with backoff.
+        self.connect_backoff = ConnectBackoff(max_delay=scan_interval)
+        self.blocked_connects = 0
 
     @property
     def cube(self) -> LinkStatusMaxCube:
@@ -252,7 +256,18 @@ class MaxCubeCoordinator(DataUpdateCoordinator[CubeSnapshot]):
             raise UpdateFailed("The MAX! Cube connection is shutting down")
         try:
             if self._cube is None:
-                self._cube = await self._async_io_call(self._connect)
+                if not self.connect_backoff.should_try(time.monotonic()):
+                    self.blocked_connects += 1
+                    raise UpdateFailed(
+                        "The MAX! Cube refused connections; waiting before the next attempt"
+                    )
+                try:
+                    self._cube = await self._async_io_call(self._connect)
+                except OSError:
+                    self.connect_backoff.record_failure(time.monotonic())
+                    raise
+                self.connect_backoff.record_success()
+                self.blocked_connects = 0
             else:
                 await self._async_poll(self._cube)
                 self._check_identity(self._cube)
