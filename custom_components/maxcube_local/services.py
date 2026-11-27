@@ -16,13 +16,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.const import Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-    callback,
-)
+from homeassistant.core import HomeAssistant, ServiceResponse, SupportsResponse, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
@@ -69,12 +63,12 @@ def _maxcube_device(
     )
 
 
-async def _async_copy_schedule(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+async def _async_copy_schedule(hass: HomeAssistant, data: dict[str, Any]) -> ServiceResponse:
     """Copy the weekly programme of one radiator thermostat to others of the same Cube."""
-    source_entry, coordinator, source = _maxcube_device(hass, call.data["source"])
+    source_entry, coordinator, source = _maxcube_device(hass, data["source"])
     found = {
         entity_id: _maxcube_device(hass, entity_id)
-        for entity_id in dict.fromkeys(call.data["targets"])
+        for entity_id in dict.fromkeys(data["targets"])
     }
     if any(entry_id != source_entry for entry_id, _, _ in found.values()):
         raise ServiceValidationError(
@@ -83,7 +77,7 @@ async def _async_copy_schedule(hass: HomeAssistant, call: ServiceCall) -> Servic
     results = await coordinator.async_copy_schedule(
         source.rf_address,
         [device.rf_address for _, _, device in found.values()],
-        call.data["days"],
+        data["days"],
     )
     response: dict[str, Any] = {}
     for entity_id, (_, _, device) in found.items():
@@ -91,9 +85,9 @@ async def _async_copy_schedule(hass: HomeAssistant, call: ServiceCall) -> Servic
     return response
 
 
-async def _handle_reconnect(hass: HomeAssistant, call: ServiceCall) -> None:
+async def _handle_reconnect(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Close the connection to the Cube and read everything again."""
-    wanted = call.data.get("entry_id")
+    wanted = data.get("entry_id")
     entries = [
         entry
         for entry in hass.config_entries.async_loaded_entries(DOMAIN)
@@ -107,9 +101,9 @@ async def _handle_reconnect(hass: HomeAssistant, call: ServiceCall) -> None:
         await entry.runtime_data.async_reconnect()
 
 
-async def _handle_reboot(hass: HomeAssistant, call: ServiceCall) -> None:
+async def _handle_reboot(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Restart a Cube after an explicit admin check, using its read identity."""
-    entry = hass.config_entries.async_get_entry(call.data["entry_id"])
+    entry = hass.config_entries.async_get_entry(data["entry_id"])
     coordinator = getattr(entry, "runtime_data", None)
     if entry is None or coordinator is None or entry.domain != DOMAIN:
         raise ServiceValidationError(
@@ -131,8 +125,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
     # Reboot interrupts every device for a moment: only an administrator may call it.
     async_register_admin_service(hass, DOMAIN, SERVICE_REBOOT, _handle_reboot, _REBOOT_SCHEMA)
 
-    async def _handle_copy_schedule(call: ServiceCall) -> ServiceResponse:
-        return await _async_copy_schedule(hass, call)
+    async def _handle_copy_schedule(data: dict[str, Any]) -> ServiceResponse:
+        return await _async_copy_schedule(hass, data)
 
     hass.services.async_register(
         DOMAIN,

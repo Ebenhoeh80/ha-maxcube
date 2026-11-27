@@ -769,7 +769,9 @@ async def test_the_climate_entity_shows_the_values_of_the_last_poll(
 async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    from custom_components.maxcube_local.button import MaxCubeRebootButton
+    from custom_components.maxcube_local.button import (  # noqa: SLF001
+        _send_reboot,
+    )
 
     await _setup(hass, config_entry)
     entity_id = _entity_id(hass, "button", f"{CUBE_SERIAL}_reboot")
@@ -784,7 +786,7 @@ async def test_the_reboot_button_sends_a_datagram_and_survives_a_network_error(
 
     with patch("custom_components.maxcube_local.button.socket.socket") as sock:
         sock.return_value.sendto.side_effect = OSError("unreachable")
-        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
+        _send_reboot(b"x")  # must not raise
     assert sock.return_value.close.called
 
 
@@ -819,14 +821,16 @@ async def test_a_serial_with_invalid_characters_is_not_sent(
 async def test_a_socket_error_during_creation_does_not_raise(
     hass: HomeAssistant, config_entry: MockConfigEntry, cube: FakeCube
 ) -> None:
-    from custom_components.maxcube_local.button import MaxCubeRebootButton
+    from custom_components.maxcube_local.button import (  # noqa: SLF001
+        _send_reboot,
+    )
 
     await _setup(hass, config_entry)
     with patch(
         "custom_components.maxcube_local.button.socket.socket",
         side_effect=OSError("no socket"),
     ):
-        MaxCubeRebootButton._send_reboot(b"x")  # must not raise
+        _send_reboot(b"x")  # must not raise
 
 
 async def test_a_device_paired_later_gets_its_entities_without_a_reload(
