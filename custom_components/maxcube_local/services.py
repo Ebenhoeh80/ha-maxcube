@@ -16,7 +16,13 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceResponse, SupportsResponse, callback
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
@@ -85,7 +91,7 @@ async def _async_copy_schedule(hass: HomeAssistant, data: dict[str, Any]) -> Ser
     return response
 
 
-async def _handle_reconnect(hass: HomeAssistant, data: dict[str, Any]) -> None:
+async def _async_reconnect(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Close the connection to the Cube and read everything again."""
     wanted = data.get("entry_id")
     entries = [
@@ -101,7 +107,7 @@ async def _handle_reconnect(hass: HomeAssistant, data: dict[str, Any]) -> None:
         await entry.runtime_data.async_reconnect()
 
 
-async def _handle_reboot(hass: HomeAssistant, data: dict[str, Any]) -> None:
+async def _async_reboot(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Restart a Cube after an explicit admin check, using its read identity."""
     entry = hass.config_entries.async_get_entry(data["entry_id"])
     coordinator = getattr(entry, "runtime_data", None)
@@ -118,15 +124,26 @@ async def _handle_reboot(hass: HomeAssistant, data: dict[str, Any]) -> None:
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
-    """Register all integration-wide actions (synchronous, as Home Assistant requires)."""
+    """Register all integration-wide actions (synchronous, as Home Assistant requires).
+
+    Home Assistant passes a single ``ServiceCall`` to a registered handler; the
+    ``hass`` instance is captured here instead of being a second parameter.
+    """
+
+    async def _handle_reconnect(call: ServiceCall) -> None:
+        await _async_reconnect(hass, call.data)
+
+    async def _handle_reboot(call: ServiceCall) -> None:
+        await _async_reboot(hass, call.data)
+
     hass.services.async_register(
         DOMAIN, SERVICE_RECONNECT, _handle_reconnect, schema=_RECONNECT_SCHEMA
     )
     # Reboot interrupts every device for a moment: only an administrator may call it.
     async_register_admin_service(hass, DOMAIN, SERVICE_REBOOT, _handle_reboot, _REBOOT_SCHEMA)
 
-    async def _handle_copy_schedule(data: dict[str, Any]) -> ServiceResponse:
-        return await _async_copy_schedule(hass, data)
+    async def _handle_copy_schedule(call: ServiceCall) -> ServiceResponse:
+        return await _async_copy_schedule(hass, call.data)
 
     hass.services.async_register(
         DOMAIN,
