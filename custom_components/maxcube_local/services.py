@@ -12,7 +12,7 @@ The actions do not start a Cube connection: they need a loaded config entry.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import voluptuous as vol
 from homeassistant.const import Platform
@@ -136,11 +136,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async def _handle_reboot(call: ServiceCall) -> None:
         await _async_reboot(hass, call.data)
 
+    # HA 2026 types the argument as probatio.Schema; vol.Schema stays valid at runtime.
     hass.services.async_register(
-        DOMAIN, SERVICE_RECONNECT, _handle_reconnect, schema=_RECONNECT_SCHEMA
+        DOMAIN, SERVICE_RECONNECT, _handle_reconnect, schema=cast(Any, _RECONNECT_SCHEMA)
     )
     # Reboot interrupts every device for a moment: only an administrator may call it.
-    async_register_admin_service(hass, DOMAIN, SERVICE_REBOOT, _handle_reboot, _REBOOT_SCHEMA)
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_REBOOT, _handle_reboot, cast(Any, _REBOOT_SCHEMA)
+    )
 
     async def _handle_copy_schedule(call: ServiceCall) -> ServiceResponse:
         return await _async_copy_schedule(hass, call.data)
@@ -149,7 +152,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_COPY_SCHEDULE,
         _handle_copy_schedule,
-        schema=_COPY_SCHEDULE_SCHEMA,
+        schema=cast(Any, _COPY_SCHEDULE_SCHEMA),
         supports_response=SupportsResponse.ONLY,
     )
     _register_entity_actions(hass)

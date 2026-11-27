@@ -13,7 +13,7 @@ import base64
 import binascii
 import logging
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 
 from maxcube.cube import DEFAULT_PORT, MaxCube
@@ -164,17 +164,17 @@ class MaxCubeWithStatus(MaxCube):
             self.telegram_log.record_sent(message, now=now())
         return sent
 
-    def _MaxCube__parse_responses(self, messages: object) -> None:
+    def _MaxCube__parse_responses(self, messages: Iterable[object]) -> None:
         """Let the library parse its messages, but evaluate ``S:`` answers as well.
 
         The library silently ignores ``S:``, which is the only real-time hint that
         the Cube discarded a command.  We do not replace its dispatch: the same
         message list is passed on unchanged after the ``S:`` values are recorded.
         """
-        for msg in messages:  # type: ignore[union-attr]
+        for msg in messages:
             if getattr(msg, "cmd", "") == "S":
                 self._parse_s_message(getattr(msg, "arg", ""))
-        super()._MaxCube__parse_responses(messages)  # type: ignore[attr-defined,misc]
+        super()._MaxCube__parse_responses(messages)
 
     def _parse_s_message(self, argument: str) -> None:
         """Record the queue state of an ``S:`` line and warn when a command was discarded."""
