@@ -251,13 +251,13 @@ class MaxCubeClimate(MaxCubeEntity, ClimateEntity):
 
     else:
 
-        @property
-        def current_temperature(self) -> float | None:  # type: ignore[misc]  # HA marks this Final, entities override it
+        @property  # type: ignore[misc]  # HA marks this Final, entities override it
+        def current_temperature(self) -> float | None:
             """Return the measured temperature."""
             return self._measured_temperature()
 
-        @property
-        def target_temperature(self) -> float | None:  # type: ignore[misc]  # HA marks this Final, entities override it
+        @property  # type: ignore[misc]  # HA marks this Final, entities override it
+        def target_temperature(self) -> float | None:
             """Return the target temperature."""
             return self._target_temperature()
 
